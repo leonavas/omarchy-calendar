@@ -44,6 +44,7 @@ Panel {
   readonly property string meetingOpenMode: String(setting("meetingOpenMode", "App window"))
   readonly property string extraAccounts: String(setting("googleAccounts", ""))
   readonly property bool copyMeetingLink: Model.truthy(setting("copyMeetingLink", true), true)
+  readonly property bool notifyAtStart: Model.truthy(setting("notifyAtStart", true), true)
   readonly property int panelGridHeight: Math.max(160, Number(setting("gridHeight", 380)))
 
   // Unset follows the system locale, so a fresh install starts out agreeing
@@ -294,6 +295,96 @@ Panel {
     root.pendingAction = ""
   }
 
+  // ------------------------------------------------ the meeting is starting
+  //
+  // A toast at the moment an event begins, which opens the call when clicked.
+  // The click action rides along as the `omarchy-exec-argv` hint rather than a
+  // libnotify action: the daemon runs it detached, so it still works after the
+  // sending process is gone and after a shell restart.
+
+  // Events already announced, so a repeat poll — or a cache rewritten in place
+  // by a sync — cannot fire the same toast twice.
+  property var notifiedEvents: ({})
+  property bool notifyArmed: false
+
+  // Everything already under way when the watcher starts is marked as seen: a
+  // shell restart at midday must not replay every meeting since breakfast.
+  function armNotifications() {
+    var seen = {}
+    var now = Date.now()
+    for (var i = 0; i < root.events.length; i++) {
+      if (root.events[i].start <= now) seen[root.events[i].id] = true
+    }
+    root.notifiedEvents = seen
+    root.notifyArmed = true
+  }
+
+  function checkStartingEvents() {
+    if (!root.notifyAtStart) return
+    // A bar surface exists per monitor, so this panel exists N times. Only the
+    // first may speak, or a meeting announces itself once per screen.
+    if (!root.isPrimaryInstance()) return
+    if (!root.cache.loaded) return
+    if (!root.notifyArmed) { root.armNotifications(); return }
+
+    var now = Date.now()
+    for (var i = 0; i < root.events.length; i++) {
+      var event = root.events[i]
+      if (event.allDay || event.response === "declined") continue
+      if (root.notifiedEvents[event.id]) continue
+      if (event.start > now) continue
+      root.notifiedEvents[event.id] = true
+      // Only just started. Something that began long ago — a laptop resumed
+      // from sleep, a first sync that arrived late — is stale news rather than
+      // a call to join, so it is marked seen above and skipped here.
+      if (now - event.start > 120000) continue
+      root.announceEvent(event)
+    }
+  }
+
+  function announceEvent(event) {
+    // Prefer the call; fall back to the event in Google Calendar so the toast
+    // is still worth clicking for something without a conference attached.
+    var meeting = String(event.meetingUrl || "")
+    var target = meeting.length > 0
+      ? Model.withAccount(meeting, root.defaultAccount)
+      : Model.withAccount(String(event.htmlLink || ""), root.defaultAccount)
+
+    var body = Model.formatRange(event, root.use24Hour)
+    if (event.meetingProvider) body += "  ·  " + event.meetingProvider
+    else if (event.location) body += "  ·  " + Model.truncate(event.location, 40)
+
+    var argv = [
+      "omarchy-notification-send",
+      "--app-name", "Calendar",
+      "-g", "󰃭",
+      // critical means the toast never auto-dismisses, so it waits to be
+      // clicked instead of vanishing while you are still reading it.
+      "-u", "critical",
+      String(event.summary || "(no title)"),
+      body
+    ]
+    if (target.length > 0) {
+      argv.push("--exec")
+      if (meeting.length > 0 && root.meetingOpenMode === "App window")
+        argv.push("omarchy-launch-webapp", target)
+      else
+        argv.push("xdg-open", target)
+    }
+    Util.execArgv(argv)
+  }
+
+  Timer {
+    id: startWatcher
+    // Ten seconds is close enough to "on the hour" for a meeting, and cheap:
+    // the check is a loop over an array already in memory.
+    interval: 10000
+    repeat: true
+    running: root.notifyAtStart
+    triggeredOnStart: true
+    onTriggered: root.checkStartingEvents()
+  }
+
   function copyToClipboard(text) {
     var value = String(text || "")
     if (value.length === 0) return
@@ -484,6 +575,10 @@ Panel {
     function day(): void { root.setView("day") }
     function newMeeting(): void { root.startMeeting() }
     function copyLink(): void { root.copyMeetingFor(Model.barEvent(root.events, root.nowMs)) }
+    function announceNext(): void {
+      var e = Model.barEvent(root.events, root.nowMs)
+      if (e) root.announceEvent(e)
+    }
     function openCalendar(): void { root.openCalendarHome() }
     function week(): void { root.setView("week") }
   }
