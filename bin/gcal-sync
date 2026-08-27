@@ -1,0 +1,389 @@
+#!/usr/bin/env python3
+"""Fetch Google Calendar into the cache the bar widget draws from.
+
+Writes ~/.local/state/omarchy/calendar/events.json, always — including on
+failure, with an `error` field — because the widget renders its own state
+from that one file. A sync that fails silently would leave the panel showing
+yesterday's events with no way to tell.
+
+Every event is flattened to what the grid actually needs: epoch milliseconds
+(so QML never parses a timezone), a resolved colour, and a single meeting URL
+picked out of the several places Google can hide one.
+"""
+
+import argparse
+import datetime as dt
+import os
+import re
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from gcalcommon import (  # noqa: E402
+    EVENTS_FILE, AuthError, api_get, eprint, read_json, write_json_private)
+
+# Google's own event palette, keyed by the colorId an event carries. Fetched
+# from /colors at runtime; this is the fallback for when that call is the one
+# that fails, so a coloured calendar never falls back to grey.
+FALLBACK_EVENT_COLORS = {
+    "1": "#7986cb", "2": "#33b679", "3": "#8e24aa", "4": "#e67c73",
+    "5": "#f6bf26", "6": "#f4511e", "7": "#039be5", "8": "#616161",
+    "9": "#3f51b5", "10": "#0b8043", "11": "#d50000",
+}
+DEFAULT_COLOR = "#039be5"
+
+# Conference links Google does not put in conferenceData — pasted into the
+# location or the description by whoever sent the invite.
+MEETING_PATTERNS = [
+    r"https://[a-z0-9.-]*zoom\.us/[^\s<>\"']+",
+    r"https://meet\.google\.com/[^\s<>\"']+",
+    r"https://[a-z0-9.-]*teams\.microsoft\.com/[^\s<>\"']+",
+    r"https://[a-z0-9.-]*teams\.live\.com/[^\s<>\"']+",
+    r"https://[a-z0-9.-]*webex\.com/[^\s<>\"']+",
+    r"https://whereby\.com/[^\s<>\"']+",
+    r"https://[a-z0-9.-]*chime\.aws/[^\s<>\"']+",
+    r"https://[a-z0-9.-]*gotomeeting\.com/[^\s<>\"']+",
+    r"https://[a-z0-9.-]*bluejeans\.com/[^\s<>\"']+",
+    r"https://[a-z0-9.-]*around\.co/[^\s<>\"']+",
+]
+MEETING_RE = re.compile("|".join(MEETING_PATTERNS), re.IGNORECASE)
+
+# Which provider a URL belongs to, so the panel can label its button "Join
+# Meet" / "Join Zoom" instead of a generic "Join".
+PROVIDERS = [
+    ("meet.google.com", "Meet"),
+    ("zoom.us", "Zoom"),
+    ("teams.microsoft.com", "Teams"),
+    ("teams.live.com", "Teams"),
+    ("webex.com", "Webex"),
+    ("whereby.com", "Whereby"),
+    ("chime.aws", "Chime"),
+    ("gotomeeting.com", "GoToMeeting"),
+    ("bluejeans.com", "BlueJeans"),
+    ("around.co", "Around"),
+]
+
+TAG_RE = re.compile(r"<[^>]+>")
+BR_RE = re.compile(r"<br\s*/?>|</p>", re.IGNORECASE)
+ENTITIES = [("&nbsp;", " "), ("&amp;", "&"), ("&lt;", "<"), ("&gt;", ">"),
+            ("&quot;", '"'), ("&#39;", "'")]
+
+
+def local_tz():
+    return dt.datetime.now().astimezone().tzinfo
+
+
+def to_epoch_ms(value):
+    """RFC3339 → epoch milliseconds."""
+    text = str(value or "").strip()
+    if not text:
+        return None
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        moment = dt.datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=local_tz())
+    return int(moment.timestamp() * 1000)
+
+
+def date_to_epoch_ms(value, end=False):
+    """All-day 'YYYY-MM-DD' → local midnight in epoch milliseconds.
+
+    All-day events carry no timezone; what "all day" means is the viewer's own
+    day, so they are pinned to local midnight rather than converted from UTC —
+    otherwise a birthday drifts onto the day before west of Greenwich.
+    """
+    try:
+        day = dt.date.fromisoformat(str(value).strip())
+    except ValueError:
+        return None
+    moment = dt.datetime.combine(day, dt.time(0, 0), tzinfo=local_tz())
+    return int(moment.timestamp() * 1000)
+
+
+def strip_html(value):
+    """Google descriptions are HTML; the panel draws plain text."""
+    text = str(value or "")
+    text = BR_RE.sub("\n", text)
+    text = TAG_RE.sub("", text)
+    for entity, char in ENTITIES:
+        text = text.replace(entity, char)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
+def meeting_url(event):
+    """The one link a click on "Join" should open.
+
+    Preference order matters: conferenceData is the conference Google itself
+    attached to the event, hangoutLink is the legacy field for the same thing,
+    and only when both are absent is it worth trusting a URL someone typed
+    into the location or pasted into the description.
+    """
+    conference = event.get("conferenceData") or {}
+    for entry in conference.get("entryPoints", []) or []:
+        if entry.get("entryPointType") == "video" and entry.get("uri"):
+            return entry["uri"]
+    if event.get("hangoutLink"):
+        return event["hangoutLink"]
+    for field in ("location", "description"):
+        match = MEETING_RE.search(str(event.get(field) or ""))
+        if match:
+            return match.group(0)
+    return ""
+
+
+def provider_for(url):
+    lowered = str(url or "").lower()
+    for needle, label in PROVIDERS:
+        if needle in lowered:
+            return label
+    return "call" if lowered else ""
+
+
+def self_response(event):
+    """This account's RSVP, which is what tints an event in Google's own UI."""
+    for attendee in event.get("attendees", []) or []:
+        if attendee.get("self"):
+            return attendee.get("responseStatus", "needsAction")
+    # No attendee list means a personal event: you are implicitly going.
+    return "accepted" if event.get("attendees") is None else "needsAction"
+
+
+def normalize_attendees(event):
+    people = []
+    for attendee in (event.get("attendees") or [])[:60]:
+        if attendee.get("resource"):
+            continue  # meeting rooms are not people
+        people.append({
+            "email": attendee.get("email", ""),
+            "name": attendee.get("displayName", ""),
+            "response": attendee.get("responseStatus", "needsAction"),
+            "optional": bool(attendee.get("optional")),
+            "organizer": bool(attendee.get("organizer")),
+            "self": bool(attendee.get("self")),
+        })
+    return people
+
+
+def normalize_event(event, calendar, event_colors):
+    start = event.get("start") or {}
+    end = event.get("end") or {}
+    all_day = "date" in start
+
+    if all_day:
+        start_ms = date_to_epoch_ms(start.get("date"))
+        end_ms = date_to_epoch_ms(end.get("date"))
+    else:
+        start_ms = to_epoch_ms(start.get("dateTime"))
+        end_ms = to_epoch_ms(end.get("dateTime"))
+    if start_ms is None:
+        return None
+    if end_ms is None or end_ms <= start_ms:
+        # A zero-length event still has to be clickable, so give it the
+        # 30 minutes Google draws such events at.
+        end_ms = start_ms + (86400000 if all_day else 1800000)
+
+    color_id = event.get("colorId")
+    color = event_colors.get(str(color_id), "") if color_id else ""
+    url = meeting_url(event)
+
+    return {
+        "id": event.get("id", ""),
+        "calendarId": calendar["id"],
+        "calendar": calendar["summary"],
+        "summary": event.get("summary", "(no title)"),
+        "location": event.get("location", ""),
+        "description": strip_html(event.get("description"))[:2000],
+        "start": start_ms,
+        "end": end_ms,
+        "allDay": all_day,
+        "color": color or calendar["color"],
+        "status": event.get("status", "confirmed"),
+        "response": self_response(event),
+        "organizer": (event.get("organizer") or {}).get("displayName") or
+                     (event.get("organizer") or {}).get("email", ""),
+        "creator": (event.get("creator") or {}).get("email", ""),
+        "attendees": normalize_attendees(event),
+        "meetingUrl": url,
+        "meetingProvider": provider_for(url),
+        "htmlLink": event.get("htmlLink", ""),
+        "recurring": bool(event.get("recurringEventId")),
+        "transparent": event.get("transparency") == "transparent",
+    }
+
+
+def fetch_event_colors():
+    try:
+        palette = api_get("/colors")
+    except Exception:
+        return dict(FALLBACK_EVENT_COLORS)
+    colors = {}
+    for key, value in (palette.get("event") or {}).items():
+        colors[str(key)] = value.get("background", DEFAULT_COLOR)
+    return colors or dict(FALLBACK_EVENT_COLORS)
+
+
+def fetch_calendars(include_hidden=False):
+    """Return the visible calendars, plus the address that owns them.
+
+    The account is reported separately because the widget pins Google links to
+    it — a browser signed into several Google accounts otherwise opens a
+    meeting as whichever one happens to be first.
+    """
+    response = api_get("/users/me/calendarList", {"maxResults": 250})
+    calendars = []
+    account = ""
+    for item in response.get("items", []) or []:
+        if item.get("primary") and item.get("id"):
+            account = str(item["id"])
+        if item.get("deleted"):
+            continue
+        # `selected` is the checkbox in Google Calendar's own sidebar. Honoring
+        # it is what makes the widget show the same calendars the web UI does.
+        if not include_hidden and not item.get("selected"):
+            continue
+        calendars.append({
+            "id": item.get("id", ""),
+            "summary": item.get("summaryOverride") or item.get("summary", ""),
+            "color": item.get("backgroundColor") or DEFAULT_COLOR,
+            "foreground": item.get("foregroundColor") or "#ffffff",
+            "primary": bool(item.get("primary")),
+            "accessRole": item.get("accessRole", "reader"),
+            "timeZone": item.get("timeZone", ""),
+        })
+    calendars.sort(key=lambda c: (not c["primary"], c["summary"].lower()))
+    return calendars, account
+
+
+def fetch_events(calendar, time_min, time_max, event_colors):
+    """Every instance in the window, recurrences already expanded by Google."""
+    events = []
+    page_token = None
+    while True:
+        params = {
+            "timeMin": time_min,
+            "timeMax": time_max,
+            # singleEvents expands a recurring series into its instances, which
+            # is the only form a time grid can draw.
+            "singleEvents": "true",
+            "orderBy": "startTime",
+            "maxResults": 2500,
+            "showDeleted": "false",
+        }
+        if page_token:
+            params["pageToken"] = page_token
+        response = api_get(
+            "/calendars/%s/events" % _quote(calendar["id"]), params)
+        for item in response.get("items", []) or []:
+            if item.get("status") == "cancelled":
+                continue
+            normalized = normalize_event(item, calendar, event_colors)
+            if normalized:
+                events.append(normalized)
+        page_token = response.get("nextPageToken")
+        if not page_token:
+            break
+    return events
+
+
+def _quote(value):
+    import urllib.parse
+    return urllib.parse.quote(value, safe="")
+
+
+def write_result(payload):
+    write_json_private(EVENTS_FILE, payload)
+
+
+def previous_payload():
+    return read_json(EVENTS_FILE) or {}
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Sync Google Calendar into the Omarchy widget cache.")
+    parser.add_argument("--days-back", type=int, default=14,
+                        help="how far back to fetch (default 14)")
+    parser.add_argument("--days-ahead", type=int, default=90,
+                        help="how far ahead to fetch (default 90)")
+    parser.add_argument("--include-hidden", action="store_true",
+                        help="include calendars unchecked in Google Calendar")
+    parser.add_argument("--print", dest="to_stdout", action="store_true",
+                        help="also write the result to stdout")
+    args = parser.parse_args()
+
+    now = dt.datetime.now(tz=local_tz())
+    time_min = (now - dt.timedelta(days=max(0, args.days_back)))
+    time_max = (now + dt.timedelta(days=max(1, args.days_ahead)))
+    # Whole days: a window that starts mid-morning would clip this morning's
+    # events out of today's column.
+    time_min = time_min.replace(hour=0, minute=0, second=0, microsecond=0)
+    time_max = time_max.replace(hour=23, minute=59, second=59, microsecond=0)
+
+    result = {
+        "syncedAt": int(now.timestamp() * 1000),
+        "timeZone": str(now.tzname() or ""),
+        "windowStart": int(time_min.timestamp() * 1000),
+        "windowEnd": int(time_max.timestamp() * 1000),
+        "error": None,
+        "needsAuth": False,
+        "account": "",
+        "calendars": [],
+        "events": [],
+    }
+
+    try:
+        event_colors = fetch_event_colors()
+        calendars, account = fetch_calendars(include_hidden=args.include_hidden)
+        events = []
+        for calendar in calendars:
+            events.extend(fetch_events(
+                calendar, time_min.isoformat(), time_max.isoformat(),
+                event_colors))
+        events.sort(key=lambda e: (e["start"], e["end"]))
+        result["account"] = account
+        result["calendars"] = calendars
+        result["events"] = events
+    except AuthError as error:
+        # Keep whatever was last fetched on screen; the panel greys it and
+        # offers the reconnect hint rather than going blank.
+        stale = previous_payload()
+        result["needsAuth"] = True
+        result["error"] = str(error)
+        result["account"] = stale.get("account", "")
+        result["calendars"] = stale.get("calendars", [])
+        result["events"] = stale.get("events", [])
+        result["syncedAt"] = stale.get("syncedAt", result["syncedAt"])
+        write_result(result)
+        eprint("gcal-sync: %s" % error)
+        return 2
+    except Exception as error:  # offline, API disabled, rate limited
+        stale = previous_payload()
+        result["error"] = str(error)
+        result["account"] = stale.get("account", "")
+        result["calendars"] = stale.get("calendars", [])
+        result["events"] = stale.get("events", [])
+        result["syncedAt"] = stale.get("syncedAt", result["syncedAt"])
+        write_result(result)
+        eprint("gcal-sync: %s" % error)
+        return 1
+
+    write_result(result)
+    if args.to_stdout:
+        import json
+        print(json.dumps(result, ensure_ascii=False))
+    else:
+        print("synced %d events across %d calendars"
+              % (len(result["events"]), len(result["calendars"])))
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except KeyboardInterrupt:
+        sys.exit(130)

@@ -1,0 +1,233 @@
+{
+  "schemaVersion": 1,
+  "id": "leonavas.calendar",
+  "name": "Google Calendar",
+  "version": "1.0.0",
+  "author": "leonavas",
+  "license": "MIT",
+  "description": "Google Calendar in the bar: what is on now or next as a label, and a day/week time grid popup you can click through into meetings.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Calendar.qml"
+  },
+  "barWidget": {
+    "displayName": "Google Calendar",
+    "description": "Next meeting in the bar, with Google Calendar's own day/week grid behind it — click an event to open it, or join the call.",
+    "category": "Time",
+    "aliases": [
+      "calendar",
+      "google calendar",
+      "gcal",
+      "agenda",
+      "meetings",
+      "schedule",
+      "events"
+    ],
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "view": "week",
+      "workweek": false,
+      "weekStartDay": null,
+      "use24Hour": true,
+      "showWeekNumbers": true,
+      "showDeclined": false,
+      "hourHeight": 40,
+      "gridHeight": 380,
+      "scrollToHour": 8,
+      "syncMinutes": 5,
+      "daysBack": 14,
+      "daysAhead": 90,
+      "meetingOpenMode": "App window",
+      "labelMode": "Next event",
+      "glyph": "󰃭",
+      "maxLabelChars": 22,
+      "warnMinutes": 5,
+      "hideWhenEmpty": false,
+      "joinOnMiddleClick": true,
+      "googleAccounts": ""
+    },
+    "schema": [
+      {
+        "key": "view",
+        "type": "enum",
+        "label": "Default view",
+        "options": [
+          "day",
+          "3day",
+          "week"
+        ],
+        "defaultValue": "week",
+        "description": "Which range the popup opens on. d, 3 and w switch it while it is open."
+      },
+      {
+        "key": "workweek",
+        "type": "boolean",
+        "label": "Week view shows Monday to Friday only",
+        "defaultValue": false,
+        "description": "Drops Saturday and Sunday from the week view, and narrows the popup to match."
+      },
+      {
+        "key": "weekStartDay",
+        "type": "enum",
+        "label": "Week starts on",
+        "options": [
+          "Locale",
+          "Sunday",
+          "Monday"
+        ],
+        "defaultValue": "Locale",
+        "description": "Locale follows the same first day the rest of the desktop uses."
+      },
+      {
+        "key": "use24Hour",
+        "type": "boolean",
+        "label": "24-hour clock",
+        "defaultValue": true
+      },
+      {
+        "key": "showWeekNumbers",
+        "type": "boolean",
+        "label": "Show the ISO week number",
+        "defaultValue": true,
+        "description": "Printed in the gutter above the hour labels, e.g. W35."
+      },
+      {
+        "key": "showDeclined",
+        "type": "boolean",
+        "label": "Show events you declined",
+        "defaultValue": false,
+        "description": "Off by default, matching Google Calendar. Shown struck through when on."
+      },
+      {
+        "key": "hourHeight",
+        "type": "integer",
+        "label": "Height of one hour (px)",
+        "min": 18,
+        "max": 120,
+        "step": 2,
+        "defaultValue": 40,
+        "description": "Taller rows fit event titles more comfortably; shorter ones fit more of the day on screen."
+      },
+      {
+        "key": "gridHeight",
+        "type": "integer",
+        "label": "Height of the popup's grid (px)",
+        "min": 160,
+        "max": 900,
+        "step": 20,
+        "defaultValue": 380,
+        "description": "How much of the day is visible before it scrolls. Capped by the screen."
+      },
+      {
+        "key": "scrollToHour",
+        "type": "integer",
+        "label": "Hour the grid opens on",
+        "min": 0,
+        "max": 23,
+        "step": 1,
+        "defaultValue": 8,
+        "description": "Used when you are looking at another day. On today it opens an hour before now instead."
+      },
+      {
+        "key": "syncMinutes",
+        "type": "integer",
+        "label": "Sync every (minutes)",
+        "min": 1,
+        "max": 120,
+        "step": 1,
+        "defaultValue": 5
+      },
+      {
+        "key": "daysBack",
+        "type": "integer",
+        "label": "Days of history to keep",
+        "min": 0,
+        "max": 180,
+        "step": 1,
+        "defaultValue": 14,
+        "description": "How far back the popup can be paged before it runs out of events."
+      },
+      {
+        "key": "daysAhead",
+        "type": "integer",
+        "label": "Days ahead to fetch",
+        "min": 7,
+        "max": 400,
+        "step": 1,
+        "defaultValue": 90
+      },
+      {
+        "key": "meetingOpenMode",
+        "type": "enum",
+        "label": "Open meeting links as",
+        "options": [
+          "App window",
+          "Browser tab"
+        ],
+        "defaultValue": "App window",
+        "description": "App window runs omarchy-launch-webapp, so the call gets its own window instead of a tab behind the browser."
+      },
+      {
+        "key": "googleAccounts",
+        "type": "string",
+        "label": "Other Google accounts to offer",
+        "defaultValue": "",
+        "description": "Comma-separated addresses. The calendar's own account is always offered first; add the others you are signed into so a left click on Join can pick between them. Links are pinned with authuser=<address> rather than /u/<number>/, which shifts as accounts are added or removed."
+      },
+      {
+        "key": "labelMode",
+        "type": "enum",
+        "label": "What the bar shows",
+        "options": [
+          "Next event",
+          "Countdown",
+          "Icon only"
+        ],
+        "defaultValue": "Next event",
+        "description": "Next event reads \"10:00 Standup\"; Countdown reads \"Standup in 12m\"."
+      },
+      {
+        "key": "glyph",
+        "type": "string",
+        "label": "Glyph",
+        "defaultValue": "󰃭",
+        "description": "Any Nerd Font character. Drawn to the left of the label."
+      },
+      {
+        "key": "maxLabelChars",
+        "type": "integer",
+        "label": "Longest event title in the bar",
+        "min": 6,
+        "max": 60,
+        "step": 1,
+        "defaultValue": 22,
+        "description": "Longer titles are elided, so one long meeting name cannot push the rest of the bar around."
+      },
+      {
+        "key": "warnMinutes",
+        "type": "integer",
+        "label": "Colour the label this long before an event (minutes)",
+        "min": 0,
+        "max": 60,
+        "step": 1,
+        "defaultValue": 5
+      },
+      {
+        "key": "hideWhenEmpty",
+        "type": "boolean",
+        "label": "Remove the widget from the bar when nothing is scheduled",
+        "defaultValue": false
+      },
+      {
+        "key": "joinOnMiddleClick",
+        "type": "boolean",
+        "label": "Middle click joins the next meeting",
+        "defaultValue": true,
+        "description": "Falls back to forcing a sync when the next event has no call attached."
+      }
+    ]
+  }
+}
