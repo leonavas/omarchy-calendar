@@ -532,6 +532,44 @@ function withAccount(url, account) {
   return cleaned + separator + "authuser=" + encodeURIComponent(name) + hash
 }
 
+// A Meet room code is three-four-three lowercase letters. It has to be read
+// out of the browser window title, because meet.google.com/new is a redirect:
+// the room does not exist until the browser has followed it, so nothing the
+// shell can ask beforehand knows the link.
+var MEET_CODE_RE = /\b([a-z]{3}-[a-z]{4}-[a-z]{3})\b/
+
+function meetCodeFromTitle(title) {
+  var match = String(title || "").match(MEET_CODE_RE)
+  return match ? match[1] : ""
+}
+
+function meetUrlFromCode(code) {
+  var value = String(code || "")
+  return value.length > 0 ? "https://meet.google.com/" + value : ""
+}
+
+// The code out of a link already on an event, so "copy link" and the watcher
+// speak about rooms in the same terms.
+function meetCodeFromUrl(url) {
+  var value = String(url || "")
+  if (value.indexOf("meet.google.com") < 0) return ""
+  return meetCodeFromTitle(value)
+}
+
+// Google's instant-meeting entry point: it mints a room and drops you into it.
+// Pinned to an account like any other Google link, so the call is created by
+// the identity the calendar belongs to rather than whichever account happens
+// to be first in the browser — a meeting created as the wrong account invites
+// people from the wrong directory.
+function newMeetingUrl(account) {
+  return withAccount("https://meet.google.com/new", account)
+}
+
+// Google Calendar itself, as the same account.
+function calendarHomeUrl(account) {
+  return withAccount("https://calendar.google.com/", account)
+}
+
 // The accounts the Join button offers. The calendar's own account leads, then
 // anything the user listed in settings, and finally the browser's own choice
 // for when none of them is the one already signed in.

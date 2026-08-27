@@ -47,14 +47,32 @@ Only calendars ticked in Google Calendar's sidebar are shown.
 |---|---|
 | Click the bar | Open the grid |
 | Middle click the bar | Join the next meeting |
-| Click an event | Open its card — Join, guests, location, description |
+| Right click the bar | Start a new Meet as your calendar account, link to the clipboard |
+| Click an event | Open its card — Join, Copy link, guests, location, description |
 | Middle click an event | Join its call directly |
 | `d` `3` `w` | Day / 3-day / week |
 | `t` `r` | Today / sync now |
 | `←` `→` `↑` `↓` | Step period / scroll hours |
 | `Esc` | Back out one layer |
 
-Accepted invitations are solid, unanswered ones outlined, declined ones hidden.
+Accepted invitations are solid, unanswered ones outlined, declined ones hidden
+(`showDeclined` shows them struck through).
+
+Anything can be bound to a key, e.g. starting a call without touching the bar:
+
+```bash
+omarchy-shell leonavas.calendar newMeeting
+omarchy-shell leonavas.calendar copyLink   # next meeting's URL to the clipboard
+omarchy-shell leonavas.calendar toggle|today|day|week|refresh|openCalendar
+```
+
+**Meeting links on the clipboard.** An event already carries its URL, so the
+card's *Copy link* is immediate. A *new* meeting is different:
+`meet.google.com/new` is a redirect, so the room does not exist until the
+browser follows it — nothing can know the link beforehand. The room code is
+read back out of the browser window title a moment later and copied, with a
+notification. If the title never yields a code within ~35s it says so rather
+than leaving a stale clipboard. Turn it off with `copyMeetingLink`.
 
 **Multiple Google accounts.** Join and *Open in Google* ask which account to
 open as. Links are pinned with `authuser=<address>` rather than `/u/<number>/`,
@@ -66,7 +84,9 @@ in the `googleAccounts` setting to have them offered too.
 Editable from the bar's settings panel, or in `~/.config/omarchy/shell.json`.
 Notable ones: `view`, `workweek`, `weekStartDay`, `use24Hour`, `hourHeight`,
 `gridHeight`, `syncMinutes`, `daysBack`/`daysAhead`, `meetingOpenMode`,
-`googleAccounts`, `labelMode`, `warnMinutes`, `showDeclined`. Full list with
+`googleAccounts`, `labelMode`, `warnMinutes`, `showDeclined`, `rightClickAction`,
+`copyMeetingLink`.
+Full list with
 descriptions in `manifest.json`.
 
 ## How it works

@@ -21,6 +21,7 @@ BarWidget {
   readonly property int warnMinutes: Math.max(0, Number(setting("warnMinutes", 5)))
   readonly property bool hideWhenEmpty: Model.truthy(setting("hideWhenEmpty", false), false)
   readonly property bool joinOnMiddleClick: Model.truthy(setting("joinOnMiddleClick", true), true)
+  readonly property string rightClickAction: String(setting("rightClickAction", "New meeting"))
 
   // ---------------------------------------------------------------- state
   readonly property var panel: panelLoader.item
@@ -63,7 +64,8 @@ BarWidget {
 
   readonly property string tooltip: {
     if (root.needsAuth) return "Google Calendar — not connected yet"
-    if (!root.hasSubject) return "Google Calendar — nothing scheduled"
+    if (!root.hasSubject)
+      return "Google Calendar — nothing scheduled\n" + root.rightClickHint
     var parts = [root.subject.summary]
     parts.push(Model.formatRange(root.subject, panel ? panel.use24Hour : true))
     if (root.running) parts.push("on now")
@@ -71,6 +73,7 @@ BarWidget {
     if (root.subject.location) parts.push(root.subject.location)
     if (root.subject.meetingUrl)
       parts.push("middle click to join " + (root.subject.meetingProvider || "the call"))
+    parts.push(root.rightClickHint)
     return parts.join("\n")
   }
 
@@ -99,6 +102,27 @@ BarWidget {
   function joinNext() {
     if (!root.hasSubject || !root.subject.meetingUrl) return
     if (panelLoader.item) panelLoader.item.joinMeeting(root.subject)
+  }
+
+  // Start a call now, as the account the calendar belongs to.
+  function startMeeting() {
+    if (panelLoader.item) panelLoader.item.startMeeting()
+  }
+
+  function openCalendar() {
+    if (panelLoader.item) panelLoader.item.openCalendarHome()
+  }
+
+  function rightClick() {
+    if (root.rightClickAction === "Sync now") root.refresh()
+    else if (root.rightClickAction === "Open Google Calendar") root.openCalendar()
+    else root.startMeeting()
+  }
+
+  readonly property string rightClickHint: {
+    if (root.rightClickAction === "Sync now") return "right click to sync"
+    if (root.rightClickAction === "Open Google Calendar") return "right click for Google Calendar"
+    return "right click to start a meeting"
   }
 
   // Forwarded so this widget can stand in for the panel as the bar's popout
@@ -159,7 +183,7 @@ BarWidget {
           root.joinNext()
         else root.refresh()
       } else if (mouseButton === Qt.RightButton) {
-        root.refresh()
+        root.rightClick()
       } else {
         root.togglePanel()
       }

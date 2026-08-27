@@ -47,7 +47,9 @@
       "warnMinutes": 5,
       "hideWhenEmpty": false,
       "joinOnMiddleClick": true,
-      "googleAccounts": ""
+      "googleAccounts": "",
+      "rightClickAction": "New meeting",
+      "copyMeetingLink": true
     },
     "schema": [
       {
@@ -227,6 +229,25 @@
         "label": "Middle click joins the next meeting",
         "defaultValue": true,
         "description": "Falls back to forcing a sync when the next event has no call attached."
+      },
+      {
+        "key": "rightClickAction",
+        "type": "enum",
+        "label": "Right click on the bar",
+        "options": [
+          "New meeting",
+          "Sync now",
+          "Open Google Calendar"
+        ],
+        "defaultValue": "New meeting",
+        "description": "New meeting opens meet.google.com/new as the calendar's own account, so the call is created by the right identity. Syncing is still available from the panel (the refresh button, or r), and runs on its own anyway."
+      },
+      {
+        "key": "copyMeetingLink",
+        "type": "boolean",
+        "label": "Copy the link when starting a new meeting",
+        "defaultValue": true,
+        "description": "meet.google.com/new is a redirect, so the room only exists once the browser follows it. The code is read back from the browser window title a moment later and the link is put on the clipboard, with a notification. Existing events carry their link already — the card's Copy link button is immediate."
       }
     ]
   }

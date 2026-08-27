@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import Quickshell.Hyprland
 import qs.Commons
 import qs.Ui
 import "Model.js" as Model
@@ -42,6 +43,7 @@ Panel {
   readonly property int daysAhead: Math.max(1, Number(setting("daysAhead", 90)))
   readonly property string meetingOpenMode: String(setting("meetingOpenMode", "App window"))
   readonly property string extraAccounts: String(setting("googleAccounts", ""))
+  readonly property bool copyMeetingLink: Model.truthy(setting("copyMeetingLink", true), true)
   readonly property int panelGridHeight: Math.max(160, Number(setting("gridHeight", 380)))
 
   // Unset follows the system locale, so a fresh install starts out agreeing
@@ -292,6 +294,108 @@ Panel {
     root.pendingAction = ""
   }
 
+  function copyToClipboard(text) {
+    var value = String(text || "")
+    if (value.length === 0) return
+    // Same shape the shell's own panels use to reach the Wayland clipboard.
+    Quickshell.execDetached(["bash", "-c",
+      "printf %s " + Util.shellQuote(value) + " | wl-copy"])
+  }
+
+  function notify(title, body) {
+    Util.execArgv(["notify-send", "-a", "Calendar", String(title), String(body)])
+  }
+
+  function copyMeetingFor(event) {
+    if (!event || !event.meetingUrl) return
+    root.copyToClipboard(event.meetingUrl)
+    root.notify(event.summary, "Meeting link copied")
+  }
+
+  // Every Meet room currently on screen, so the watcher can tell the room it
+  // just opened from calls that were already running.
+  function collectMeetCodes() {
+    var found = {}
+    var list = Hyprland.toplevels ? (Hyprland.toplevels.values || []) : []
+    for (var i = 0; i < list.length; i++) {
+      var code = root.meetCodeOf(list[i])
+      if (code.length > 0) found[code] = true
+    }
+    return found
+  }
+
+  // A room code is only trusted from a window that is actually Meet: three
+  // short letter groups would otherwise match ordinary words in a title.
+  function meetCodeOf(toplevel) {
+    if (!toplevel) return ""
+    var title = String(toplevel.title || "")
+    var wayland = toplevel.wayland
+    var appId = String((wayland && wayland.appId) || "")
+    if ((title + " " + appId).toLowerCase().indexOf("meet") < 0) return ""
+    return Model.meetCodeFromTitle(title)
+  }
+
+  function findNewMeetCode() {
+    var list = Hyprland.toplevels ? (Hyprland.toplevels.values || []) : []
+    for (var i = 0; i < list.length; i++) {
+      var code = root.meetCodeOf(list[i])
+      if (code.length > 0 && !root.knownMeetCodes[code]) return code
+    }
+    return ""
+  }
+
+  property var knownMeetCodes: ({})
+
+  // meet.google.com/new is a redirect, so at launch there is no link to copy
+  // yet — the room is minted by the browser. The code turns up in the window
+  // title once the room is open, which is where this reads it from.
+  Timer {
+    id: meetLinkWatcher
+    property int attempts: 0
+    interval: 700
+    repeat: true
+    running: false
+
+    onTriggered: {
+      meetLinkWatcher.attempts += 1
+      var code = root.findNewMeetCode()
+      if (code.length > 0) {
+        meetLinkWatcher.running = false
+        var url = Model.meetUrlFromCode(code)
+        root.copyToClipboard(url)
+        root.notify("Meeting ready", url + "\ncopied to the clipboard")
+        return
+      }
+      // ~35s, enough for a cold browser plus the Meet lobby. Giving up says so
+      // rather than leaving a stale clipboard silently in place.
+      if (meetLinkWatcher.attempts >= 50) {
+        meetLinkWatcher.running = false
+        root.notify("Meeting started",
+          "Could not read the link from the window title — copy it from the address bar.")
+      }
+    }
+  }
+
+  // Start a call now, as the calendar's own account. No account picker here:
+  // this is the quick gesture, and "the same account as my calendar" is the
+  // whole point of it.
+  function startMeeting(account) {
+    var as = account === undefined ? root.defaultAccount : account
+    if (root.copyMeetingLink) {
+      root.knownMeetCodes = root.collectMeetCodes()
+      meetLinkWatcher.attempts = 0
+      meetLinkWatcher.restart()
+    }
+    root.openUrl(Model.newMeetingUrl(as))
+    if (root.opened) root.close()
+  }
+
+  function openCalendarHome(account) {
+    var as = account === undefined ? root.defaultAccount : account
+    Util.execArgv(["xdg-open", Model.calendarHomeUrl(as)])
+    if (root.opened) root.close()
+  }
+
   function runAuth() {
     // Interactive by nature — it prints instructions and waits on a browser
     // round trip — so it gets a terminal rather than a detached process.
@@ -378,6 +482,9 @@ Panel {
     function refresh(): void { root.sync(true) }
     function today(): void { root.goToday() }
     function day(): void { root.setView("day") }
+    function newMeeting(): void { root.startMeeting() }
+    function copyLink(): void { root.copyMeetingFor(Model.barEvent(root.events, root.nowMs)) }
+    function openCalendar(): void { root.openCalendarHome() }
     function week(): void { root.setView("week") }
   }
 
@@ -1120,6 +1227,21 @@ Panel {
                   fontFamily: root.fontFamily
                   fontSize: Style.font.bodySmall
                   onClicked: root.requestAction("join")
+                }
+
+                Button {
+                  visible: event && event.meetingUrl !== ""
+                  text: "Copy link"
+                  iconText: "󰆏"  // nf-md-content_copy
+                  bordered: true
+                  foreground: root.dimForeground
+                  accent: root.accent
+                  fontFamily: root.fontFamily
+                  fontSize: Style.font.bodySmall
+                  onClicked: {
+                    root.copyMeetingFor(event)
+                    root.close()
+                  }
                 }
 
                 Button {
