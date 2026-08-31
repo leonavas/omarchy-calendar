@@ -3,16 +3,6 @@
 Your next meeting in the bar, and Google Calendar's day/week grid behind it.
 Click an event to open it, or to join its call.
 
-```
-August 2026  ‹ ›                                       [D][3][W] ⟳
-        MON      TUE      WED      THU      FRI
-         24       25       26      (27)      28
- 09:00           ███ Standup ███
- 10:00  ██ 1:1 ██   ▢ Design review        ← outline = not answered
- 11:00  ─────────────●──────────────────   ← now
- 12:00                    ███ Lunch ███
-```
-
 ## What it does
 
 - **Never miss the start.** The bar shows what is on now or next, turns to the
