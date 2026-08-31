@@ -143,7 +143,7 @@
         "max": 23,
         "step": 1,
         "defaultValue": 8,
-        "description": "Used when you are looking at another day. On today it opens an hour before now instead."
+        "description": "Used when you are looking at another day. On today the grid opens centred on the current time instead."
       },
       {
         "key": "syncMinutes",

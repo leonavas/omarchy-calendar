@@ -533,16 +533,26 @@ Panel {
       root.bar.centerHoverRevealSuppressed = value
   }
 
-  // Open on the working day, not on midnight: showing today means showing an
-  // hour or so before now, and browsing another day means starting at the
-  // hour the day tends to begin.
+  // Open on the working day, not on midnight. Today opens with the now line
+  // halfway down the viewport — it is the thing you came to read, and it wants
+  // what is behind it as much as what is ahead. Browsing another day has no
+  // now line to aim at, so it starts at the hour the day tends to begin.
   function scrollToRelevantHour() {
     if (!gridFlick) return
-    var hour = root.showingToday
-      ? Math.max(0, new Date(root.nowMs).getHours() - 1)
-      : root.scrollToHour
-    var target = hour * grid.hourHeight
-    var maxY = Math.max(0, grid.height - gridFlick.height)
+    // Called from a callLater on open, when the flickable may not have been
+    // laid out yet; the configured height is what it is about to become.
+    var viewport = gridFlick.height > 0 ? gridFlick.height : root.panelGridHeight
+    var target
+    if (root.showingToday) {
+      // The same measure the now line itself is drawn at, so the two cannot
+      // drift apart across a DST boundary.
+      var start = Model.startOfDay(root.nowMs)
+      var nowY = ((root.nowMs - start) / Model.dayLength(start)) * grid.height
+      target = nowY - viewport / 2
+    } else {
+      target = root.scrollToHour * grid.hourHeight
+    }
+    var maxY = Math.max(0, grid.height - viewport)
     gridFlick.contentY = Math.max(0, Math.min(target, maxY))
   }
 
