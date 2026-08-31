@@ -33,9 +33,9 @@
       "weekStartDay": null,
       "use24Hour": true,
       "showWeekNumbers": true,
-      "showDeclined": false,
+      "showDeclined": true,
       "hourHeight": 40,
-      "gridHeight": 380,
+      "gridHeight": 620,
       "scrollToHour": 8,
       "syncMinutes": 5,
       "daysBack": 14,
@@ -101,8 +101,8 @@
         "key": "showDeclined",
         "type": "boolean",
         "label": "Show events you declined",
-        "defaultValue": false,
-        "description": "Off by default, matching Google Calendar. Shown struck through when on."
+        "defaultValue": true,
+        "description": "On by default, so a meeting you turned down still holds its place in the day. Shown faded and struck through; turn it off to hide them the way Google does."
       },
       {
         "key": "hourHeight",
@@ -121,7 +121,7 @@
         "min": 160,
         "max": 900,
         "step": 20,
-        "defaultValue": 380,
+        "defaultValue": 620,
         "description": "How much of the day is visible before it scrolls. Capped by the screen."
       },
       {

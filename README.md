@@ -55,8 +55,8 @@ Only calendars ticked in Google Calendar's sidebar are shown.
 | `←` `→` `↑` `↓` | Step period / scroll hours |
 | `Esc` | Back out one layer |
 
-Accepted invitations are solid, unanswered ones outlined, declined ones hidden
-(`showDeclined` shows them struck through).
+Accepted invitations are solid, unanswered ones outlined, declined ones faded
+and struck through (turn `showDeclined` off to hide them).
 
 Anything can be bound to a key, e.g. starting a call without touching the bar:
 

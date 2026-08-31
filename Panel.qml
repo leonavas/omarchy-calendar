@@ -35,7 +35,7 @@ Panel {
   readonly property bool workweek: Model.truthy(setting("workweek", false), false)
   readonly property bool use24Hour: Model.truthy(setting("use24Hour", true), true)
   readonly property bool showWeekNumbers: Model.truthy(setting("showWeekNumbers", true), true)
-  readonly property bool showDeclined: Model.truthy(setting("showDeclined", false), false)
+  readonly property bool showDeclined: Model.truthy(setting("showDeclined", true), true)
   readonly property int hourHeightSetting: Math.max(18, Number(setting("hourHeight", 40)))
   readonly property int scrollToHour: Math.max(0, Math.min(23, Number(setting("scrollToHour", 8))))
   readonly property int syncMinutes: Math.max(1, Number(setting("syncMinutes", 5)))
@@ -45,7 +45,7 @@ Panel {
   readonly property string extraAccounts: String(setting("googleAccounts", ""))
   readonly property bool copyMeetingLink: Model.truthy(setting("copyMeetingLink", true), true)
   readonly property bool notifyAtStart: Model.truthy(setting("notifyAtStart", true), true)
-  readonly property int panelGridHeight: Math.max(160, Number(setting("gridHeight", 380)))
+  readonly property int panelGridHeight: Math.max(160, Number(setting("gridHeight", 620)))
 
   // Unset follows the system locale, so a fresh install starts out agreeing
   // with the rest of the desktop about where a week begins. The settings panel
@@ -102,8 +102,9 @@ Panel {
   readonly property string syncError: String(cache.error || "")
   readonly property bool everSynced: Number(cache.syncedAt || 0) > 0
 
-  // Declined invitations are hidden by default, the way Google hides them
-  // unless you ask for them back.
+  // Declined invitations are shown by default — a meeting you turned down
+  // still explains why that hour looks busy — and drop out when the setting
+  // is off, the way Google hides them.
   readonly property var events: {
     if (root.showDeclined) return root.allEvents
     var list = []
@@ -555,9 +556,9 @@ Panel {
   readonly property int footerHeight: Style.space(20)
 
   readonly property int desiredWidth: {
-    if (root.view === "day") return Style.space(440)
-    if (root.view === "3day") return Style.space(680)
-    return Style.space(workweek ? 820 : 1020)
+    if (root.view === "day") return Style.space(560)
+    if (root.view === "3day") return Style.space(840)
+    return Style.space(workweek ? 1000 : 1260)
   }
   readonly property int desiredHeight: root.headerHeight + root.dayHeaderHeight +
     root.allDayHeight + root.panelGridHeight + root.footerHeight + Style.space(18)
