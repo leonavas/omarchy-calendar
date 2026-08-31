@@ -45,7 +45,7 @@ Panel {
   readonly property string extraAccounts: String(setting("googleAccounts", ""))
   readonly property bool copyMeetingLink: Model.truthy(setting("copyMeetingLink", true), true)
   readonly property bool notifyAtStart: Model.truthy(setting("notifyAtStart", true), true)
-  readonly property int panelGridHeight: Math.max(160, Number(setting("gridHeight", 620)))
+  readonly property int panelGridHeight: root.sp(Math.max(160, Number(setting("gridHeight", 620))))
 
   // Unset follows the system locale, so a fresh install starts out agreeing
   // with the rest of the desktop about where a week begins. The settings panel
@@ -546,22 +546,49 @@ Panel {
     gridFlick.contentY = Math.max(0, Math.min(target, maxY))
   }
 
+  // ----------------------------------------------------------------- scale
+  // A dense grid of small type inside a popup this size reads thin, and the
+  // shell's own tokens are sized for the bar, not for a window-sized panel.
+  // Every length and type size the panel draws goes through sp()/fs(), so one
+  // number grows the whole thing in proportion rather than leaving the text
+  // marooned in the middle of larger blocks.
+  readonly property real uiScale: {
+    var n = Number(setting("contentScale", 125))
+    if (!isFinite(n) || n <= 0) return 1.25
+    return Math.max(0.8, Math.min(2.0, n / 100))
+  }
+  function sp(px) {
+    var n = Style.spaceReal(px) * root.uiScale
+    return n <= 0 ? 0 : Math.max(1, Math.round(n))
+  }
+  function fs(px) {
+    var n = Number(px) * root.uiScale
+    return isFinite(n) && n > 0 ? Math.max(1, Math.round(n)) : 1
+  }
+  readonly property int fontCaption: root.fs(Style.font.caption)
+  readonly property int fontBodySmall: root.fs(Style.font.bodySmall)
+  readonly property int fontBody: root.fs(Style.font.body)
+  readonly property int fontSubtitle: root.fs(Style.font.subtitle)
+  readonly property int fontTitle: root.fs(Style.font.title)
+  readonly property int fontHeading: root.fs(Style.font.heading)
+  readonly property int fontIcon: root.fs(Style.font.icon)
+
   // --------------------------------------------------------------- metrics
-  readonly property int gutterWidth: Style.space(root.showWeekNumbers && root.view !== "day" ? 54 : 46)
-  readonly property int headerHeight: Style.space(30)
-  readonly property int dayHeaderHeight: Style.space(40)
-  readonly property int allDayRowHeight: Style.space(19)
+  readonly property int gutterWidth: root.sp(root.showWeekNumbers && root.view !== "day" ? 54 : 46)
+  readonly property int headerHeight: root.sp(30)
+  readonly property int dayHeaderHeight: root.sp(40)
+  readonly property int allDayRowHeight: root.sp(19)
   readonly property int allDayHeight: root.allDayLanes > 0
-    ? root.allDayLanes * root.allDayRowHeight + Style.space(6) : 0
-  readonly property int footerHeight: Style.space(20)
+    ? root.allDayLanes * root.allDayRowHeight + root.sp(6) : 0
+  readonly property int footerHeight: root.sp(20)
 
   readonly property int desiredWidth: {
-    if (root.view === "day") return Style.space(560)
-    if (root.view === "3day") return Style.space(840)
-    return Style.space(workweek ? 1000 : 1260)
+    if (root.view === "day") return root.sp(560)
+    if (root.view === "3day") return root.sp(840)
+    return root.sp(workweek ? 1000 : 1260)
   }
   readonly property int desiredHeight: root.headerHeight + root.dayHeaderHeight +
-    root.allDayHeight + root.panelGridHeight + root.footerHeight + Style.space(18)
+    root.allDayHeight + root.panelGridHeight + root.footerHeight + root.sp(18)
 
   IpcHandler {
     target: root.ipcTarget
@@ -639,16 +666,16 @@ Panel {
           text: Model.rangeTitle(root.days)
           color: root.foreground
           font.family: root.fontFamily
-          font.pixelSize: Style.font.title
+          font.pixelSize: root.fontTitle
           font.bold: true
           renderType: Text.NativeRendering
         }
 
         Row {
           anchors.left: rangeTitle.right
-          anchors.leftMargin: Style.space(10)
+          anchors.leftMargin: root.sp(10)
           anchors.verticalCenter: parent.verticalCenter
-          spacing: Style.space(2)
+          spacing: root.sp(2)
 
           Button {
             anchors.verticalCenter: parent.verticalCenter
@@ -657,9 +684,9 @@ Panel {
             foreground: root.dimForeground
             accent: root.accent
             fontFamily: root.fontFamily
-            iconSize: Style.font.icon
-            verticalPadding: Style.space(2)
-            horizontalPadding: Style.space(5)
+            iconSize: root.fontIcon
+            verticalPadding: root.sp(2)
+            horizontalPadding: root.sp(5)
             onClicked: root.step(-1)
           }
           Button {
@@ -669,9 +696,9 @@ Panel {
             foreground: root.dimForeground
             accent: root.accent
             fontFamily: root.fontFamily
-            iconSize: Style.font.icon
-            verticalPadding: Style.space(2)
-            horizontalPadding: Style.space(5)
+            iconSize: root.fontIcon
+            verticalPadding: root.sp(2)
+            horizontalPadding: root.sp(5)
             onClicked: root.step(1)
           }
           Button {
@@ -682,9 +709,9 @@ Panel {
             foreground: root.foreground
             accent: root.accent
             fontFamily: root.fontFamily
-            fontSize: Style.font.caption
-            verticalPadding: Style.space(2)
-            horizontalPadding: Style.space(7)
+            fontSize: root.fontCaption
+            verticalPadding: root.sp(2)
+            horizontalPadding: root.sp(7)
             onClicked: root.goToday()
           }
         }
@@ -692,7 +719,7 @@ Panel {
         Row {
           anchors.right: parent.right
           anchors.verticalCenter: parent.verticalCenter
-          spacing: Style.space(2)
+          spacing: root.sp(2)
 
           Repeater {
             model: [
@@ -712,9 +739,9 @@ Panel {
               foreground: root.foreground
               accent: root.accent
               fontFamily: root.fontFamily
-              fontSize: Style.font.caption
-              verticalPadding: Style.space(2)
-              horizontalPadding: Style.space(6)
+              fontSize: root.fontCaption
+              verticalPadding: root.sp(2)
+              horizontalPadding: root.sp(6)
               onClicked: root.setView(modelData.id)
             }
           }
@@ -726,12 +753,12 @@ Panel {
             foreground: root.syncing ? root.accent : root.dimForeground
             accent: root.accent
             fontFamily: root.fontFamily
-            iconSize: Style.font.icon
+            iconSize: root.fontIcon
             // Button spins its own icon while a fetch is in flight, which is
             // the only feedback a sync gives before the grid repaints.
             iconSpinning: root.syncing
-            verticalPadding: Style.space(2)
-            horizontalPadding: Style.space(5)
+            verticalPadding: root.sp(2)
+            horizontalPadding: root.sp(5)
             onClicked: root.sync(true)
           }
         }
@@ -755,13 +782,13 @@ Panel {
           visible: root.showWeekNumbers && root.view !== "day"
           anchors.left: parent.left
           anchors.bottom: parent.bottom
-          anchors.bottomMargin: Style.space(6)
+          anchors.bottomMargin: root.sp(6)
           width: root.gutterWidth
           horizontalAlignment: Text.AlignHCenter
           text: root.days.length > 0 ? "W" + Model.isoWeek(root.days[0]) : ""
           color: root.faintForeground
           font.family: root.fontFamily
-          font.pixelSize: Style.font.caption
+          font.pixelSize: root.fontCaption
           renderType: Text.NativeRendering
         }
 
@@ -784,14 +811,14 @@ Panel {
 
               Column {
                 anchors.centerIn: parent
-                spacing: Style.space(1)
+                spacing: root.sp(1)
 
                 Text {
                   anchors.horizontalCenter: parent.horizontalCenter
                   text: Model.shortWeekday(parent.parent.modelData).toUpperCase()
                   color: parent.parent.isToday ? root.accent : root.dimForeground
                   font.family: root.fontFamily
-                  font.pixelSize: Style.font.caption
+                  font.pixelSize: root.fontCaption
                   font.letterSpacing: 0.8
                   renderType: Text.NativeRendering
                 }
@@ -799,8 +826,8 @@ Panel {
                 // Today's date sits in a filled pip, the way Google marks it.
                 Rectangle {
                   anchors.horizontalCenter: parent.horizontalCenter
-                  width: Math.max(dayNumber.implicitWidth + Style.space(9), Style.space(20))
-                  height: Style.space(20)
+                  width: Math.max(dayNumber.implicitWidth + root.sp(9), root.sp(20))
+                  height: root.sp(20)
                   radius: height / 2
                   color: parent.parent.isToday ? root.accent : "transparent"
 
@@ -812,7 +839,7 @@ Panel {
                       ? Qt.rgba(Color.background.r, Color.background.g, Color.background.b, 1)
                       : root.foreground
                     font.family: root.fontFamily
-                    font.pixelSize: Style.font.subtitle
+                    font.pixelSize: root.fontSubtitle
                     font.bold: parent.parent.parent.isToday
                     renderType: Text.NativeRendering
                   }
@@ -846,14 +873,14 @@ Panel {
         Text {
           anchors.left: parent.left
           anchors.top: parent.top
-          anchors.topMargin: Style.space(3)
+          anchors.topMargin: root.sp(3)
           width: root.gutterWidth
           horizontalAlignment: Text.AlignRight
-          rightPadding: Style.space(7)
+          rightPadding: root.sp(7)
           text: "all-day"
           color: root.faintForeground
           font.family: root.fontFamily
-          font.pixelSize: Style.font.caption
+          font.pixelSize: root.fontCaption
           renderType: Text.NativeRendering
         }
 
@@ -867,11 +894,11 @@ Panel {
 
             visible: modelData.lane < root.allDayLanes
             x: root.gutterWidth + modelData.startCol * allDayBand.columnWidth + 1
-            y: Style.space(3) + modelData.lane * root.allDayRowHeight
-            width: Math.max(Style.space(10),
+            y: root.sp(3) + modelData.lane * root.allDayRowHeight
+            width: Math.max(root.sp(10),
               (modelData.endCol - modelData.startCol + 1) * allDayBand.columnWidth - 2)
-            height: root.allDayRowHeight - Style.space(3)
-            radius: Style.space(3)
+            height: root.allDayRowHeight - root.sp(3)
+            radius: root.sp(3)
             color: style === "filled" ? event.color : Model.withAlpha(event.color, 0.16)
             border.width: style === "filled" ? 0 : 1
             border.color: event.color
@@ -879,15 +906,15 @@ Panel {
 
             Text {
               anchors.fill: parent
-              anchors.leftMargin: Style.space(6)
-              anchors.rightMargin: Style.space(4)
+              anchors.leftMargin: root.sp(6)
+              anchors.rightMargin: root.sp(4)
               verticalAlignment: Text.AlignVCenter
               elide: Text.ElideRight
               text: (modelData.continuesBefore ? "‹ " : "") + event.summary +
                     (modelData.continuesAfter ? " ›" : "")
               color: parent.style === "filled" ? Model.textOn(event.color) : root.foreground
               font.family: root.fontFamily
-              font.pixelSize: Style.font.caption
+              font.pixelSize: root.fontCaption
               font.strikeout: parent.style === "declined"
               renderType: Text.NativeRendering
             }
@@ -916,7 +943,7 @@ Panel {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: footer.top
-        anchors.bottomMargin: Style.space(4)
+        anchors.bottomMargin: root.sp(4)
         contentWidth: width
         contentHeight: grid.height
         clip: true
@@ -928,7 +955,7 @@ Panel {
           width: gridFlick.width
           height: 24 * hourHeight
 
-          readonly property real hourHeight: Style.space(root.hourHeightSetting)
+          readonly property real hourHeight: root.sp(root.hourHeightSetting)
           readonly property real columnWidth: (width - root.gutterWidth) / Math.max(1, root.days.length)
 
           // Hour rules and their labels.
@@ -943,13 +970,13 @@ Panel {
 
               Text {
                 anchors.right: parent.left
-                anchors.rightMargin: -root.gutterWidth + Style.space(7)
+                anchors.rightMargin: -root.gutterWidth + root.sp(7)
                 anchors.top: parent.top
-                anchors.topMargin: -Style.space(5)
+                anchors.topMargin: -root.sp(5)
                 text: index === 0 ? "" : Model.formatHourLabel(index, root.use24Hour)
                 color: root.faintForeground
                 font.family: root.fontFamily
-                font.pixelSize: Style.font.caption
+                font.pixelSize: root.fontCaption
                 renderType: Text.NativeRendering
               }
 
@@ -1017,9 +1044,9 @@ Panel {
 
                   x: modelData.column * slot + 1
                   y: modelData.top * grid.height
-                  width: Math.max(Style.space(14), slot * modelData.span - Style.space(3))
-                  height: Math.max(Style.space(12), modelData.height * grid.height - 1)
-                  radius: Style.space(3)
+                  width: Math.max(root.sp(14), slot * modelData.span - root.sp(3))
+                  height: Math.max(root.sp(12), modelData.height * grid.height - 1)
+                  radius: root.sp(3)
                   clip: true
 
                   color: style === "filled" ? event.color : Model.withAlpha(event.color, 0.14)
@@ -1033,27 +1060,27 @@ Panel {
                   // which calendar they belong to once the fill is gone.
                   Rectangle {
                     visible: block.style !== "filled"
-                    width: Style.space(3)
+                    width: root.sp(3)
                     height: parent.height
                     color: block.event.color
                   }
 
                   Column {
                     anchors.fill: parent
-                    anchors.margins: Style.space(3)
-                    anchors.leftMargin: block.style === "filled" ? Style.space(5) : Style.space(7)
+                    anchors.margins: root.sp(3)
+                    anchors.leftMargin: block.style === "filled" ? root.sp(5) : root.sp(7)
                     spacing: 0
 
                     Text {
                       width: parent.width
                       elide: Text.ElideRight
-                      maximumLineCount: block.height > Style.space(34) ? 2 : 1
+                      maximumLineCount: block.height > root.sp(34) ? 2 : 1
                       wrapMode: Text.Wrap
                       text: block.event.summary
                       color: block.style === "filled"
                         ? Model.textOn(block.event.color) : root.foreground
                       font.family: root.fontFamily
-                      font.pixelSize: Style.font.caption
+                      font.pixelSize: root.fontCaption
                       font.bold: true
                       font.strikeout: block.style === "declined"
                       renderType: Text.NativeRendering
@@ -1063,7 +1090,7 @@ Panel {
                       width: parent.width
                       // Only when there is room: a 15-minute block that tries
                       // to show two lines shows neither.
-                      visible: block.height > Style.space(28)
+                      visible: block.height > root.sp(28)
                       elide: Text.ElideRight
                       text: Model.formatTime(block.event.start, root.use24Hour) +
                             (block.event.meetingUrl ? "  󰕧" : "")
@@ -1071,7 +1098,7 @@ Panel {
                         ? Model.withAlpha(Model.textOn(block.event.color), 0.8)
                         : root.dimForeground
                       font.family: root.fontFamily
-                      font.pixelSize: Style.font.caption
+                      font.pixelSize: root.fontCaption
                       renderType: Text.NativeRendering
                     }
                   }
@@ -1121,9 +1148,9 @@ Panel {
             Rectangle {
               visible: root.todayColumn >= 0
               x: root.todayColumn * grid.columnWidth
-              y: -Style.space(3)
-              width: Style.space(7)
-              height: Style.space(7)
+              y: -root.sp(3)
+              width: root.sp(7)
+              height: root.sp(7)
               radius: width / 2
               color: root.accent
             }
@@ -1142,7 +1169,7 @@ Panel {
         Text {
           anchors.left: parent.left
           anchors.verticalCenter: parent.verticalCenter
-          width: parent.width - Style.space(90)
+          width: parent.width - root.sp(90)
           elide: Text.ElideRight
           text: {
             if (root.needsAuth) return "Not connected to Google — click to set up"
@@ -1155,7 +1182,7 @@ Panel {
           }
           color: (root.needsAuth || root.syncError.length > 0) ? root.accent : root.faintForeground
           font.family: root.fontFamily
-          font.pixelSize: Style.font.caption
+          font.pixelSize: root.fontCaption
           renderType: Text.NativeRendering
 
           MouseArea {
@@ -1172,7 +1199,7 @@ Panel {
           text: "d/3/w · t today · r sync"
           color: root.faintForeground
           font.family: root.fontFamily
-          font.pixelSize: Style.font.caption
+          font.pixelSize: root.fontCaption
           renderType: Text.NativeRendering
         }
       }
@@ -1211,10 +1238,10 @@ Panel {
       Rectangle {
         id: card
         anchors.centerIn: parent
-        width: Math.min(parent.width - Style.space(24), Style.space(400))
-        height: Math.min(parent.height - Style.space(16),
-                         detailColumn.implicitHeight + Style.space(28))
-        radius: Style.cornerRadius > 0 ? Style.cornerRadius : Style.space(4)
+        width: Math.min(parent.width - root.sp(24), root.sp(400))
+        height: Math.min(parent.height - root.sp(16),
+                         detailColumn.implicitHeight + root.sp(28))
+        radius: Style.cornerRadius > 0 ? Style.cornerRadius : root.sp(4)
         color: Color.popups.background
         border.width: 1
         border.color: root.strongHairline
@@ -1226,8 +1253,8 @@ Panel {
 
         // The event's colour, as a rail down the side.
         Rectangle {
-          width: Style.space(3)
-          height: parent.height - Style.space(2)
+          width: root.sp(3)
+          height: parent.height - root.sp(2)
           anchors.verticalCenter: parent.verticalCenter
           anchors.left: parent.left
           anchors.leftMargin: 1
@@ -1238,23 +1265,23 @@ Panel {
         Button {
           anchors.top: parent.top
           anchors.right: parent.right
-          anchors.margins: Style.space(6)
+          anchors.margins: root.sp(6)
           z: 2
           iconText: "󰅖"  // nf-md-close
           tooltipText: "Close (Esc)"
           foreground: root.faintForeground
           accent: root.accent
           fontFamily: root.fontFamily
-          iconSize: Style.font.bodySmall
-          verticalPadding: Style.space(2)
-          horizontalPadding: Style.space(4)
+          iconSize: root.fontBodySmall
+          verticalPadding: root.sp(2)
+          horizontalPadding: root.sp(4)
           onClicked: root.clearSelection()
         }
 
         Flickable {
           anchors.fill: parent
-          anchors.margins: Style.space(14)
-          anchors.leftMargin: Style.space(16)
+          anchors.margins: root.sp(14)
+          anchors.leftMargin: root.sp(16)
           contentWidth: width
           contentHeight: detailColumn.implicitHeight
           clip: true
@@ -1264,22 +1291,22 @@ Panel {
           Column {
             id: detailColumn
             width: parent.width
-            spacing: Style.space(8)
+            spacing: root.sp(8)
 
             Text {
-              width: parent.width - Style.space(22)
+              width: parent.width - root.sp(22)
               wrapMode: Text.Wrap
               text: event ? event.summary : ""
               color: root.foreground
               font.family: root.fontFamily
-              font.pixelSize: Style.font.heading
+              font.pixelSize: root.fontHeading
               font.bold: true
               renderType: Text.NativeRendering
             }
 
             Column {
               width: parent.width
-              spacing: Style.space(2)
+              spacing: root.sp(2)
 
               Text {
                 text: event ? (Model.longWeekday(event.start) + ", " +
@@ -1287,7 +1314,7 @@ Panel {
                                new Date(event.start).getDate()) : ""
                 color: root.foreground
                 font.family: root.fontFamily
-                font.pixelSize: Style.font.body
+                font.pixelSize: root.fontBody
                 renderType: Text.NativeRendering
               }
 
@@ -1298,7 +1325,7 @@ Panel {
                                (event.recurring ? "  ·  repeats" : "")) : ""
                 color: root.dimForeground
                 font.family: root.fontFamily
-                font.pixelSize: Style.font.bodySmall
+                font.pixelSize: root.fontBodySmall
                 renderType: Text.NativeRendering
               }
             }
@@ -1306,10 +1333,10 @@ Panel {
             // ---- join / open, and which account to do it as
             Column {
               width: parent.width
-              spacing: Style.space(6)
+              spacing: root.sp(6)
 
               Row {
-                spacing: Style.space(6)
+                spacing: root.sp(6)
 
                 Button {
                   visible: event && event.meetingUrl !== ""
@@ -1321,7 +1348,7 @@ Panel {
                   foreground: root.foreground
                   accent: root.accent
                   fontFamily: root.fontFamily
-                  fontSize: Style.font.bodySmall
+                  fontSize: root.fontBodySmall
                   onClicked: root.requestAction("join")
                 }
 
@@ -1333,7 +1360,7 @@ Panel {
                   foreground: root.dimForeground
                   accent: root.accent
                   fontFamily: root.fontFamily
-                  fontSize: Style.font.bodySmall
+                  fontSize: root.fontBodySmall
                   onClicked: {
                     root.copyMeetingFor(event)
                     root.close()
@@ -1348,7 +1375,7 @@ Panel {
                   foreground: root.dimForeground
                   accent: root.accent
                   fontFamily: root.fontFamily
-                  fontSize: Style.font.bodySmall
+                  fontSize: root.fontBodySmall
                   onClicked: root.requestAction("open")
                 }
               }
@@ -1358,14 +1385,14 @@ Panel {
               // grab away from it and dismiss the event underneath.
               Column {
                 width: parent.width
-                spacing: Style.space(3)
+                spacing: root.sp(3)
                 visible: root.accountPickerOpen
 
                 Text {
                   text: root.pendingAction === "join" ? "Join as" : "Open as"
                   color: root.faintForeground
                   font.family: root.fontFamily
-                  font.pixelSize: Style.font.caption
+                  font.pixelSize: root.fontCaption
                   font.letterSpacing: 0.6
                   renderType: Text.NativeRendering
                 }
@@ -1385,8 +1412,8 @@ Panel {
                       ? root.foreground : root.dimForeground
                     accent: root.accent
                     fontFamily: root.fontFamily
-                    fontSize: Style.font.caption
-                    verticalPadding: Style.space(4)
+                    fontSize: root.fontCaption
+                    verticalPadding: root.sp(4)
                     onClicked: root.performAction(root.pendingAction, modelData.account)
                   }
                 }
@@ -1402,26 +1429,26 @@ Panel {
             // ---- where
             Row {
               width: parent.width
-              spacing: Style.space(8)
+              spacing: root.sp(8)
               visible: event && event.location !== ""
 
               Text {
                 text: "󰍎"  // nf-md-map_marker
                 color: root.faintForeground
                 font.family: root.fontFamily
-                font.pixelSize: Style.font.bodySmall
+                font.pixelSize: root.fontBodySmall
                 renderType: Text.NativeRendering
               }
 
               Text {
-                width: parent.width - Style.space(24)
+                width: parent.width - root.sp(24)
                 wrapMode: Text.Wrap
                 maximumLineCount: 2
                 elide: Text.ElideRight
                 text: event ? event.location : ""
                 color: root.dimForeground
                 font.family: root.fontFamily
-                font.pixelSize: Style.font.bodySmall
+                font.pixelSize: root.fontBodySmall
                 renderType: Text.NativeRendering
               }
             }
@@ -1429,18 +1456,18 @@ Panel {
             // ---- which calendar, and your own answer to the invitation
             Row {
               width: parent.width
-              spacing: Style.space(8)
+              spacing: root.sp(8)
 
               Rectangle {
                 anchors.verticalCenter: parent.verticalCenter
-                width: Style.space(8)
-                height: Style.space(8)
+                width: root.sp(8)
+                height: root.sp(8)
                 radius: width / 2
                 color: event ? event.color : root.accent
               }
 
               Text {
-                width: parent.width - Style.space(24)
+                width: parent.width - root.sp(24)
                 elide: Text.ElideRight
                 text: event
                   ? event.calendar + (event.attendees && event.attendees.length > 0
@@ -1448,7 +1475,7 @@ Panel {
                   : ""
                 color: root.dimForeground
                 font.family: root.fontFamily
-                font.pixelSize: Style.font.bodySmall
+                font.pixelSize: root.fontBodySmall
                 renderType: Text.NativeRendering
               }
             }
@@ -1456,14 +1483,14 @@ Panel {
             // ---- guests
             Column {
               width: parent.width
-              spacing: Style.space(3)
+              spacing: root.sp(3)
               visible: event && event.attendees && event.attendees.length > 0
 
               Text {
                 text: event ? Model.attendeeSummary(event.attendees) : ""
                 color: root.faintForeground
                 font.family: root.fontFamily
-                font.pixelSize: Style.font.caption
+                font.pixelSize: root.fontCaption
                 renderType: Text.NativeRendering
               }
 
@@ -1475,7 +1502,7 @@ Panel {
 
                 Row {
                   required property var modelData
-                  spacing: Style.space(6)
+                  spacing: root.sp(6)
 
                   Text {
                     text: Model.responseGlyph(modelData.response)
@@ -1483,7 +1510,7 @@ Panel {
                       : modelData.response === "declined" ? root.accent
                       : root.faintForeground
                     font.family: root.fontFamily
-                    font.pixelSize: Style.font.caption
+                    font.pixelSize: root.fontCaption
                     renderType: Text.NativeRendering
                   }
 
@@ -1492,7 +1519,7 @@ Panel {
                           (modelData.organizer ? " (organizer)" : "")
                     color: modelData.self ? root.foreground : root.dimForeground
                     font.family: root.fontFamily
-                    font.pixelSize: Style.font.caption
+                    font.pixelSize: root.fontCaption
                     renderType: Text.NativeRendering
                   }
                 }
@@ -1503,7 +1530,7 @@ Panel {
                 text: event ? "+ " + (event.attendees.length - 8) + " more" : ""
                 color: root.faintForeground
                 font.family: root.fontFamily
-                font.pixelSize: Style.font.caption
+                font.pixelSize: root.fontCaption
                 renderType: Text.NativeRendering
               }
             }
@@ -1520,7 +1547,7 @@ Panel {
               text: event ? Model.truncate(event.description, 900) : ""
               color: root.dimForeground
               font.family: root.fontFamily
-              font.pixelSize: Style.font.bodySmall
+              font.pixelSize: root.fontBodySmall
               lineHeight: 1.25
               renderType: Text.NativeRendering
               onLinkActivated: function(link) { root.openUrl(link) }

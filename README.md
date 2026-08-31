@@ -80,9 +80,9 @@ omarchy-shell leonavas.calendar toggle|today|day|week|refresh|openCalendar
 ## Settings
 
 From the bar's settings panel, or in `~/.config/omarchy/shell.json`. Common
-ones: `view`, `workweek`, `weekStartDay`, `use24Hour`, `hourHeight`,
-`gridHeight`, `syncMinutes`, `meetingOpenMode`, `labelMode`, `warnMinutes`,
-`showDeclined`, `googleAccounts`. The full list, with descriptions, is in
+ones: `view`, `workweek`, `weekStartDay`, `use24Hour`, `contentScale`,
+`hourHeight`, `gridHeight`, `syncMinutes`, `meetingOpenMode`, `labelMode`,
+`warnMinutes`, `showDeclined`, `googleAccounts`. The full list, with descriptions, is in
 `manifest.json`.
 
 ## If something looks wrong

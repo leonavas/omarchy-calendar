@@ -36,6 +36,7 @@
       "showDeclined": true,
       "hourHeight": 40,
       "gridHeight": 620,
+      "contentScale": 125,
       "scrollToHour": 8,
       "syncMinutes": 5,
       "daysBack": 14,
@@ -105,6 +106,16 @@
         "description": "On by default, so a meeting you turned down still holds its place in the day. Shown faded and struck through; turn it off to hide them the way Google does."
       },
       {
+        "key": "contentScale",
+        "type": "integer",
+        "label": "Scale of the popup's contents (%)",
+        "min": 80,
+        "max": 200,
+        "step": 5,
+        "defaultValue": 125,
+        "description": "Grows type, padding and hour rows together, so the panel gets roomier or denser as a whole. 100 matches the rest of the shell."
+      },
+      {
         "key": "hourHeight",
         "type": "integer",
         "label": "Height of one hour (px)",
@@ -112,7 +123,7 @@
         "max": 120,
         "step": 2,
         "defaultValue": 40,
-        "description": "Taller rows fit event titles more comfortably; shorter ones fit more of the day on screen."
+        "description": "Taller rows fit event titles more comfortably; shorter ones fit more of the day on screen. Multiplied by the content scale."
       },
       {
         "key": "gridHeight",
@@ -122,7 +133,7 @@
         "max": 900,
         "step": 20,
         "defaultValue": 620,
-        "description": "How much of the day is visible before it scrolls. Capped by the screen."
+        "description": "How much of the day is visible before it scrolls. Multiplied by the content scale, and capped by the screen."
       },
       {
         "key": "scrollToHour",
