@@ -35,7 +35,7 @@
       "showWeekNumbers": true,
       "showDeclined": true,
       "hourHeight": 40,
-      "gridHeight": 620,
+      "gridHeight": 540,
       "contentScale": 125,
       "scrollToHour": 8,
       "syncMinutes": 5,
@@ -132,7 +132,7 @@
         "min": 160,
         "max": 900,
         "step": 20,
-        "defaultValue": 620,
+        "defaultValue": 540,
         "description": "How much of the day is visible before it scrolls. Multiplied by the content scale, and capped by the screen."
       },
       {

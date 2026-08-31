@@ -45,7 +45,7 @@ Panel {
   readonly property string extraAccounts: String(setting("googleAccounts", ""))
   readonly property bool copyMeetingLink: Model.truthy(setting("copyMeetingLink", true), true)
   readonly property bool notifyAtStart: Model.truthy(setting("notifyAtStart", true), true)
-  readonly property int panelGridHeight: root.sp(Math.max(160, Number(setting("gridHeight", 620))))
+  readonly property int panelGridHeight: root.sp(Math.max(160, Number(setting("gridHeight", 540))))
 
   // Unset follows the system locale, so a fresh install starts out agreeing
   // with the rest of the desktop about where a week begins. The settings panel
