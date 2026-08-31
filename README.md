@@ -1,7 +1,7 @@
 # Google Calendar for the Omarchy bar
 
-The next meeting in your bar; Google Calendar's day/week grid behind it. Click
-an event to open it, or to join its call.
+Your next meeting in the bar, and Google Calendar's day/week grid behind it.
+Click an event to open it, or to join its call.
 
 ```
 August 2026  ‹ ›                                       [D][3][W] ⟳
@@ -13,33 +13,57 @@ August 2026  ‹ ›                                       [D][3][W] ⟳
  12:00                    ███ Lunch ███
 ```
 
+## What it does
+
+- **Never miss the start.** The bar shows what is on now or next, turns to the
+  accent colour a few minutes before, and sends a toast the moment a meeting
+  begins — click it to land straight in the call.
+- **Join without hunting for the link.** Middle click the bar to join the next
+  meeting, or middle click any event in the grid to join that one.
+- **Start a meeting in one gesture.** Right click the bar for a new Meet, opened
+  as your calendar account with the link already on the clipboard.
+- **The real grid, not a list.** Day, 3-day and week views, all-day band, week
+  numbers, current-time line, your Google colours. Accepted invitations are
+  solid, unanswered ones outlined, declined ones faded and struck through.
+- **Works while it is closed.** A background sync keeps the cache warm, so the
+  bar is right the instant you look at it — and if a sync fails, the last good
+  day stays on screen with the error in the footer.
+- **Several Google accounts.** Links are pinned to the right account, so you
+  never open a meeting as the wrong you.
+
 ## Install
 
 ```bash
-git clone <this-repo> ~/.config/omarchy/plugins/leonavas.calendar
+git clone https://github.com/leonavas/omarchy-calendar.git \
+  ~/.config/omarchy/plugins/leonavas.calendar
 omarchy bar put leonavas.calendar --before omarchy.clock
 ```
 
-## Connect
+## Connect Google
 
 Google needs an OAuth client to identify the app. One-time, ~5 minutes.
 
-1. [Create a project](https://console.cloud.google.com/) and
+1. [Create a project](https://console.cloud.google.com/projectcreate) and
    [enable the Calendar API](https://console.cloud.google.com/apis/library/calendar-json.googleapis.com).
-2. **APIs & Services → OAuth consent screen** (now called *Google Auth
-   Platform*):
-   - **Audience** → user type **Internal** if your Workspace allows it, else
-     **External** + add yourself under *Test users*.
+2. [**Google Auth Platform**](https://console.cloud.google.com/auth/overview)
+   (the old *OAuth consent screen*):
+   - **Audience** → **Internal** if your Workspace allows it, otherwise
+     **External** and add yourself under *Test users*.
    - **Data Access** → add the scope `.../auth/calendar.readonly`.
-3. **Clients → Create client** → **Desktop app** → download the JSON.
-4. Run, then log in in the browser:
+3. [**Clients**](https://console.cloud.google.com/auth/clients) → **Create
+   client** → **Desktop app** → download the JSON.
+4. Run this and log in in the browser:
 
    ```bash
-   bin/gcal-auth --client-secret-file ~/Downloads/client_secret_*.json
+   ~/.config/omarchy/plugins/leonavas.calendar/bin/gcal-auth \
+     --client-secret-file ~/Downloads/client_secret_*.json
    ```
 
-`bin/gcal-auth --status` shows the connected account; `--reset` forgets it.
-Only calendars ticked in Google Calendar's sidebar are shown.
+`gcal-auth --status` shows the connected account, `--reset` forgets it. Only
+the calendars ticked in Google Calendar's own sidebar are shown.
+
+Nothing sensitive lands in this directory: tokens live in
+`~/.local/state/omarchy/calendar/`.
 
 ## Use
 
@@ -47,18 +71,15 @@ Only calendars ticked in Google Calendar's sidebar are shown.
 |---|---|
 | Click the bar | Open the grid |
 | Middle click the bar | Join the next meeting |
-| Right click the bar | Start a new Meet as your calendar account, link to the clipboard |
-| Click an event | Open its card — Join, Copy link, guests, location, description |
-| Middle click an event | Join its call directly |
+| Right click the bar | New Meet, link on the clipboard |
+| Click an event | Its card — join, copy link, guests, location, description |
+| Middle click an event | Join that call |
 | `d` `3` `w` | Day / 3-day / week |
 | `t` `r` | Today / sync now |
 | `←` `→` `↑` `↓` | Step period / scroll hours |
 | `Esc` | Back out one layer |
 
-Accepted invitations are solid, unanswered ones outlined, declined ones faded
-and struck through (turn `showDeclined` off to hide them).
-
-Anything can be bound to a key, e.g. starting a call without touching the bar:
+Any of it can be bound to a key instead:
 
 ```bash
 omarchy-shell leonavas.calendar newMeeting
@@ -66,77 +87,21 @@ omarchy-shell leonavas.calendar copyLink   # next meeting's URL to the clipboard
 omarchy-shell leonavas.calendar toggle|today|day|week|refresh|openCalendar
 ```
 
-**Meeting links on the clipboard.** An event already carries its URL, so the
-card's *Copy link* is immediate. A *new* meeting is different:
-`meet.google.com/new` is a redirect, so the room does not exist until the
-browser follows it — nothing can know the link beforehand. The room code is
-read back out of the browser window title a moment later and copied, with a
-notification. If the title never yields a code within ~35s it says so rather
-than leaving a stale clipboard. Turn it off with `copyMeetingLink`.
-
-**Multiple Google accounts.** Join and *Open in Google* ask which account to
-open as. Links are pinned with `authuser=<address>` rather than `/u/<number>/`,
-because the number is just sign-in order and shifts. List your other addresses
-in the `googleAccounts` setting to have them offered too.
-
 ## Settings
 
-Editable from the bar's settings panel, or in `~/.config/omarchy/shell.json`.
-Notable ones: `view`, `workweek`, `weekStartDay`, `use24Hour`, `hourHeight`,
-`gridHeight`, `syncMinutes`, `daysBack`/`daysAhead`, `meetingOpenMode`,
-`googleAccounts`, `labelMode`, `warnMinutes`, `showDeclined`, `rightClickAction`,
-`copyMeetingLink`.
-Full list with
-descriptions in `manifest.json`.
+From the bar's settings panel, or in `~/.config/omarchy/shell.json`. Common
+ones: `view`, `workweek`, `weekStartDay`, `use24Hour`, `hourHeight`,
+`gridHeight`, `syncMinutes`, `meetingOpenMode`, `labelMode`, `warnMinutes`,
+`showDeclined`, `googleAccounts`. The full list, with descriptions, is in
+`manifest.json`.
 
-## How it works
+## If something looks wrong
 
-`bin/gcal-sync` fetches the calendar and writes
-`~/.local/state/omarchy/calendar/events.json`; the panel watches that file.
-Split this way because the sync holds a refresh token and must keep working
-while the panel is closed, and because a bar exists per monitor — one file
-means one fetch, shared. Writes are atomic, so a watcher never sees a partial
-one; errors are written into the same file, so the panel can report them and
-keep showing the last good data.
-
-Events are flattened to epoch milliseconds (QML never parses a timezone), a
-resolved colour, and one meeting URL picked from `conferenceData`,
-`hangoutLink`, the location, or the description, in that order.
-
-The Python is stdlib-only — no `google-api-python-client`.
-
-```
-Calendar.qml   bar label + button        bin/gcal-auth      one-time login
-Panel.qml      grid + event card         bin/gcal-sync      fetch → cache
-Model.js       dates, layout, colour     bin/gcalcommon.py  token/HTTP
-```
-
-`Model.js` is pure and runs under node, which is where the layout packing and
-date maths are tested.
-
-## Credentials
-
-Tokens live in `~/.local/state/omarchy/calendar/` (`0700`, files `0600`) —
-never in this directory, so the repo is safe to publish. Your OAuth client
-secret is not a password: for an installed app Google treats it as public,
-which is why the flow also uses PKCE.
-
-## Troubleshooting
-
-**"Not connected to Google"** — run `bin/gcal-auth`, or click the footer.
-
-**Nothing after connecting** — run `bin/gcal-sync` by hand; it prints what it
-fetched or why it failed. `--include-hidden` also fetches unticked calendars.
-
-**"Google issued no refresh token"** — Google only issues one on first consent.
-Revoke at [Account permissions](https://myaccount.google.com/permissions) and
-re-run.
-
-**Re-auth every 7 days** — an *External* app in *Testing* expires refresh
-tokens weekly. Publish the app to stop that.
-
-**A code change does nothing** — the shell hot-reloads plugin files, but a live
-panel can survive it. `omarchy restart shell` always applies.
+- **"Not connected to Google"** — run `bin/gcal-auth`, or click the footer.
+- **Nothing after connecting** — run `bin/gcal-sync` by hand; it prints what it
+  fetched, or why it failed.
+- **Asked to log in every 7 days** — an *External* app left in *Testing*
+  expires its token weekly. Publish the app to stop it.
 
 ## Licence
 
