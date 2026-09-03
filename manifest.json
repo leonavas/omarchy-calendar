@@ -266,7 +266,7 @@
         "type": "boolean",
         "label": "Notify when a meeting starts",
         "defaultValue": true,
-        "description": "A toast at the moment an event begins; clicking it opens the call, or the event in Google Calendar when there is no call attached. Sent at critical urgency so it waits to be clicked rather than fading. Declined and all-day events are skipped, and meetings that started before the shell did are not replayed."
+        "description": "A toast at the moment an event begins; clicking it opens the call, or the event in Google Calendar when there is no call attached. It stays on screen for 20 seconds, then fades. Declined and all-day events are skipped, and meetings that started before the shell did are not replayed."
       }
     ]
   }

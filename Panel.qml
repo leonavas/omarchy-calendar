@@ -359,9 +359,11 @@ Panel {
       "omarchy-notification-send",
       "--app-name", "Calendar",
       "-g", "󰃭",
-      // critical means the toast never auto-dismisses, so it waits to be
-      // clicked instead of vanishing while you are still reading it.
-      "-u", "critical",
+      // Normal urgency so the daemon honours the timeout: critical would pin
+      // the toast until clicked. Twenty seconds is long enough to read and
+      // click, short enough not to linger through the meeting.
+      "-u", "normal",
+      "-t", "20000",
       String(event.summary || "(no title)"),
       body
     ]
