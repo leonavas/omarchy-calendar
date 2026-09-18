@@ -531,7 +531,12 @@ Panel {
   }
 
   function setCenterHoverRevealSuppressed(value) {
-    if (root.bar && "centerHoverRevealSuppressed" in root.bar)
+    // Omarchy 4.0.3 moved third-party widgets onto the PluginBarApi facade,
+    // where this property is readonly. Prefer the setter it exposes; the
+    // direct assignment remains for hosts predating that facade.
+    if (root.bar && typeof root.bar.setCenterHoverRevealSuppressed === "function")
+      root.bar.setCenterHoverRevealSuppressed(value)
+    else if (root.bar && "centerHoverRevealSuppressed" in root.bar)
       root.bar.centerHoverRevealSuppressed = value
   }
 
