@@ -28,6 +28,7 @@ BarWidget {
   readonly property var events: panel ? panel.events : []
   readonly property double nowMs: panel ? panel.nowMs : Date.now()
   readonly property bool needsAuth: panel ? panel.needsAuth === true : false
+  readonly property bool vacation: panel ? panel.vacationActive === true : false
 
   // The one event the bar speaks for: whatever is running, handing over to
   // the next one once it is close enough to need leaving for.
@@ -57,12 +58,19 @@ BarWidget {
   // vertical bar has no room for the words at all, so it keeps only the glyph.
   readonly property bool iconOnly: root.vertical || root.labelMode === "Icon only"
 
+  readonly property string palmGlyph: "󱁕"  // nf-md-palm_tree
+
   readonly property string label: {
+    // Away: the palm tree stands in for the meeting, and says nothing else.
+    if (root.vacation) return root.palmGlyph
     if (root.iconOnly) return root.glyph
     return root.glyph + "  " + root.eventLabel
   }
 
   readonly property string tooltip: {
+    if (root.vacation)
+      return "On vacation — " + Model.vacationUntilLabel(
+        panel.vacationUntil, root.nowMs, panel.use24Hour) + "\nclick for the beach"
     if (root.needsAuth) return "Google Calendar — not connected yet"
     if (!root.hasSubject)
       return "Google Calendar — nothing scheduled\n" + root.rightClickHint
@@ -144,7 +152,7 @@ BarWidget {
   }
 
   // ---------------------------------------------------------------- layout
-  visible: !(root.hideWhenEmpty && !root.hasSubject && !root.needsAuth)
+  visible: root.vacation || !(root.hideWhenEmpty && !root.hasSubject && !root.needsAuth)
   implicitWidth: root.visible ? button.implicitWidth : 0
   implicitHeight: root.visible ? button.implicitHeight : 0
 
@@ -172,7 +180,7 @@ BarWidget {
     tooltipText: root.tooltip
     // Urgent while a meeting is about to start — the one moment the widget
     // has something to say that is worth interrupting the bar's colour for.
-    active: root.imminent || root.needsAuth
+    active: (root.imminent && !root.vacation) || root.needsAuth
     useActiveColor: true
     horizontalMargin: 8.75
     verticalPadding: 8.75

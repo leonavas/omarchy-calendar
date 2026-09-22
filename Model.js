@@ -688,3 +688,111 @@ function syncAgeLabel(syncedAt, nowMs) {
   if (hours < 24) return "synced " + hours + "h ago"
   return "synced " + Math.round(hours / 24) + "d ago"
 }
+
+// ----------------------------------------------------------------- vacation
+//
+// Vacation mode swaps the bar's "next meeting" for a palm tree and the grid
+// for a beach. It lives in its own small state file next to the event cache,
+// so every monitor's copy of the widget agrees on whether you are away.
+
+function emptyVacation() {
+  return { active: false, until: 0, since: 0 }
+}
+
+// Null when the text is not a whole JSON object — an empty or half-written
+// file — so a caller can keep what it already knows rather than reset.
+function parseVacation(raw) {
+  if (!raw || String(raw).trim().length === 0) return null
+  try {
+    var parsed = JSON.parse(raw)
+    if (!parsed || typeof parsed !== "object") return null
+    return {
+      active: parsed.active === true,
+      until: Number(parsed.until || 0),
+      since: Number(parsed.since || 0)
+    }
+  } catch (e) {
+    return null
+  }
+}
+
+function serializeVacation(state) {
+  return JSON.stringify({
+    active: state.active === true,
+    until: Number(state.until || 0),
+    since: Number(state.since || 0)
+  }, null, 2) + "\n"
+}
+
+// The one-click ways to end a vacation. `until: 0` means "when I say so".
+function vacationPresets(nowMs) {
+  var out = []
+  var today = startOfDay(nowMs)
+  var endOfDay = today + 18 * HOUR
+  if (endOfDay - nowMs > 30 * MINUTE)
+    out.push({ label: "Rest of today", detail: "back at 18:00", until: endOfDay })
+  var tomorrow = addDays(today, 1) + 8 * HOUR
+  out.push({ label: "Tomorrow morning", detail: shortWeekday(tomorrow) + " 08:00", until: tomorrow })
+  var weekday = new Date(today).getDay()
+  var daysToMonday = ((8 - weekday) % 7) || 7
+  var monday = addDays(today, daysToMonday) + 8 * HOUR
+  out.push({ label: "Next Monday", detail: shortMonth(monday) + " " + new Date(monday).getDate() + ", 08:00", until: monday })
+  var week = addDays(today, 7) + 8 * HOUR
+  out.push({ label: "One week", detail: shortWeekday(week) + " " + shortMonth(week) + " " + new Date(week).getDate() + ", 08:00", until: week })
+  out.push({ label: "Until I say so", detail: "end it by hand", until: 0 })
+  return out
+}
+
+// "2026-09-29 08:00", "2026-09-29" (08:00 assumed), or the Brazilian
+// "29/09/2026 08:00". Returns NaN for anything else.
+function parseDateTimeInput(text) {
+  var value = String(text || "").trim()
+  var year, month, day, hour = 8, minute = 0
+  var iso = value.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{2}))?$/)
+  var br = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2}))?$/)
+  if (iso) {
+    year = Number(iso[1]); month = Number(iso[2]); day = Number(iso[3])
+    if (iso[4] !== undefined) { hour = Number(iso[4]); minute = Number(iso[5]) }
+  } else if (br) {
+    day = Number(br[1]); month = Number(br[2]); year = Number(br[3])
+    if (br[4] !== undefined) { hour = Number(br[4]); minute = Number(br[5]) }
+  } else {
+    return NaN
+  }
+  if (month < 1 || month > 12 || day < 1 || day > 31 || hour > 23 || minute > 59) return NaN
+  var date = new Date(year, month - 1, day, hour, minute, 0, 0)
+  // Reject "31 February" rather than letting Date roll it into March.
+  if (date.getMonth() !== month - 1 || date.getDate() !== day) return NaN
+  return date.getTime()
+}
+
+function formatDateTimeInput(ms) {
+  var d = new Date(ms)
+  return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()) +
+         " " + pad2(d.getHours()) + ":" + pad2(d.getMinutes())
+}
+
+// "until 18:00" / "until tomorrow 08:00" / "until Mon Sep 29, 08:00".
+function vacationUntilLabel(untilMs, nowMs, use24Hour) {
+  if (!untilMs) return "until you say so"
+  var time = formatTime(untilMs, use24Hour)
+  if (sameDay(untilMs, nowMs)) return "until " + time
+  if (sameDay(untilMs, nowMs + DAY)) return "until tomorrow " + time
+  var d = new Date(untilMs)
+  var label = "until " + shortWeekday(untilMs) + " " + shortMonth(untilMs) + " " + d.getDate()
+  if (d.getFullYear() !== new Date(nowMs).getFullYear()) label += " " + d.getFullYear()
+  return label + ", " + time
+}
+
+// "3 days left" / "6h left" / "back in 40m" — the beach's own clock.
+function vacationRemainingLabel(untilMs, nowMs) {
+  if (!untilMs) return ""
+  var delta = untilMs - nowMs
+  if (delta <= 0) return "time to head back"
+  var minutes = Math.round(delta / MINUTE)
+  if (minutes < 60) return "back in " + minutes + "m"
+  var hours = Math.round(delta / HOUR)
+  if (hours < 36) return hours + "h left"
+  var days = Math.round(delta / DAY)
+  return days + (days === 1 ? " day left" : " days left")
+}

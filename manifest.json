@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "id": "leonavas.calendar",
   "name": "Google Calendar",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "leonavas",
   "license": "MIT",
-  "description": "Google Calendar in the bar: what is on now or next as a label, and a day/week time grid popup you can click through into meetings.",
+  "description": "Google Calendar in the bar: what is on now or next as a label, a day/week time grid popup you can click through into meetings, and a vacation mode that swaps it all for a palm tree.",
   "kinds": [
     "bar-widget"
   ],

@@ -124,6 +124,115 @@ Panel {
     onLoadFailed: root.cache = Model.parseCache("")
   }
 
+  // -------------------------------------------------------------- vacation
+  //
+  // Away: the bar shows a palm tree instead of the next meeting, the popup
+  // shows a beach instead of the grid, and meetings start without a toast.
+  // Kept in its own file beside the cache so every monitor's copy of the
+  // widget — and the next shell restart — agrees on whether you are away.
+  property var vacation: Model.emptyVacation()
+  readonly property bool vacationActive: root.vacation.active === true
+  readonly property double vacationUntil: Number(root.vacation.until || 0)
+
+  // The "start vacation" card, and whether its date field holds the keyboard.
+  property bool vacationDialogOpen: false
+  property bool vacationFieldFocused: false
+  property bool vacationLoaded: false
+
+  FileView {
+    id: vacationFile
+    path: root.statePath + "/vacation.json"
+    watchChanges: true
+    atomicWrites: true
+    printErrors: false
+    onFileChanged: reload()
+    onLoaded: {
+      // A torn read — another writer caught mid-file — parses to null and
+      // changes nothing; the next change event brings the whole file.
+      var parsed = Model.parseVacation(text())
+      if (parsed !== null) root.vacation = parsed
+      else if (!root.vacationLoaded) root.vacation = Model.emptyVacation()
+      root.vacationLoaded = true
+      // Deferred: a vacation whose end passed while the shell was down
+      // should end now, not at the next minute tick — but not from inside
+      // this handler's own assignment.
+      Qt.callLater(root.checkVacationEnd)
+    }
+    onLoadFailed: {
+      // A failure after the first load is an atomic replace caught
+      // mid-rename, not a change of heart: keep the state already held.
+      if (root.vacationLoaded) return
+      root.vacationLoaded = true
+      root.vacation = Model.emptyVacation()
+      // First run: write the file, so there is something for the watcher
+      // to watch. A path that does not exist yet cannot be watched, and the
+      // next start would otherwise be missed until the panel reloads it.
+      root.saveVacation(root.vacation)
+    }
+  }
+
+  function saveVacation(state) {
+    root.vacation = state
+    vacationFile.setText(Model.serializeVacation(state))
+  }
+
+  // `untilMs` of 0 means it ends when you end it.
+  function startVacation(untilMs) {
+    root.vacationDialogOpen = false
+    root.vacationFieldFocused = false
+    keyCatcher.forceActiveFocus()
+    root.clearSelection()
+    root.saveVacation({ active: true, until: Number(untilMs || 0), since: Date.now() })
+  }
+
+  function endVacation() {
+    root.vacationDialogOpen = false
+    root.vacationFieldFocused = false
+    root.saveVacation({ active: false, until: 0, since: 0 })
+    // Back to the working day, wherever the grid was left before leaving.
+    root.goToday()
+  }
+
+  function toggleVacation() {
+    if (root.vacationActive) root.endVacation()
+    else root.startVacation(0)
+  }
+
+  function openVacationDialog() {
+    root.clearSelection()
+    root.vacationDialogOpen = true
+  }
+
+  function closeVacationDialog() {
+    root.vacationDialogOpen = false
+    root.vacationFieldFocused = false
+    // The date field may have held focus; the shortcuts want it back.
+    keyCatcher.forceActiveFocus()
+  }
+
+  // A timed vacation ends itself. Only the first bar surface may do the
+  // ending, or every monitor writes the file and sends the toast.
+  //
+  // Never called from inside vacationChanged: ending writes `vacation`, and a
+  // handler on that signal can run before the derived vacationActive binding
+  // has caught up, which recursed until the stack ran out. The check reads
+  // the raw object, runs from the clock tick and from a deferred call after a
+  // load, and remembers which end it already announced.
+  property double vacationEndedUntil: 0
+
+  function checkVacationEnd() {
+    var state = root.vacation
+    if (!state || state.active !== true) return
+    var until = Number(state.until || 0)
+    if (until <= 0 || Date.now() < until) return
+    if (!root.isPrimaryInstance()) return
+    if (root.vacationEndedUntil === until) return
+    root.vacationEndedUntil = until
+    root.endVacation()
+    root.notify("Vacation over", "The calendar is back in the bar")
+  }
+  onNowMsChanged: root.checkVacationEnd()
+
   // ------------------------------------------------------------------ sync
   //
   // Resolved off this file's own location so the plugin keeps working from
@@ -326,6 +435,9 @@ Panel {
     // first may speak, or a meeting announces itself once per screen.
     if (!root.isPrimaryInstance()) return
     if (!root.cache.loaded) return
+    // Away: nothing is announced, and the watcher re-arms on return so the
+    // meetings that passed on the beach are not replayed as a burst.
+    if (root.vacationActive) { root.notifyArmed = false; return }
     if (!root.notifyArmed) { root.armNotifications(); return }
 
     var now = Date.now()
@@ -501,6 +613,9 @@ Panel {
   // ------------------------------------------------------------- lifecycle
   function open() {
     root.selectedEvent = null
+    // Cheap insurance against a watcher that missed a write: what you see on
+    // opening is what the file says.
+    vacationFile.reload()
     root.controller.show()
     root.sync(false)
     Qt.callLater(root.scrollToRelevantHour)
@@ -516,6 +631,7 @@ Panel {
   function close() {
     root.setCenterHoverRevealSuppressed(false)
     root.selectedEvent = null
+    root.closeVacationDialog()
     root.controller.hide()
   }
 
@@ -599,13 +715,18 @@ Panel {
     ? root.allDayLanes * root.allDayRowHeight + root.sp(6) : 0
   readonly property int footerHeight: root.sp(20)
 
+  readonly property int beachWidth: root.sp(640)
+  readonly property int beachHeight: root.sp(400)
+
   readonly property int desiredWidth: {
+    if (root.vacationActive) return root.beachWidth
     if (root.view === "day") return root.sp(560)
     if (root.view === "3day") return root.sp(840)
     return root.sp(workweek ? 1000 : 1260)
   }
-  readonly property int desiredHeight: root.headerHeight + root.dayHeaderHeight +
-    root.allDayHeight + root.panelGridHeight + root.footerHeight + root.sp(18)
+  readonly property int desiredHeight: root.vacationActive ? root.beachHeight
+    : root.headerHeight + root.dayHeaderHeight +
+      root.allDayHeight + root.panelGridHeight + root.footerHeight + root.sp(18)
 
   IpcHandler {
     target: root.ipcTarget
@@ -626,6 +747,8 @@ Panel {
     }
     function openCalendar(): void { root.openCalendarHome() }
     function week(): void { root.setView("week") }
+    function vacation(): void { root.toggleVacation() }
+    function endVacation(): void { root.endVacation() }
   }
 
   // ============================================================== the popup
@@ -643,12 +766,16 @@ Panel {
     PanelKeyCatcher {
       id: keyCatcher
       anchors.fill: parent
+      // The vacation card's date field needs its letters more than the
+      // shortcuts do.
+      blocked: root.vacationFieldFocused
 
       onCloseRequested: {
-        // Escape unwinds one layer at a time — account picker, then the event,
-        // then the panel. The grid behind is still where you left it, and
-        // dismissing straight to the bar would lose that.
-        if (root.accountPickerOpen) root.cancelAccountPicker()
+        // Escape unwinds one layer at a time — vacation card or account
+        // picker, then the event, then the panel. The grid behind is still
+        // where you left it, and dismissing straight to the bar would lose that.
+        if (root.vacationDialogOpen) root.closeVacationDialog()
+        else if (root.accountPickerOpen) root.cancelAccountPicker()
         else if (root.selectedEvent) root.clearSelection()
         else root.close()
       }
@@ -666,6 +793,11 @@ Panel {
         else if (key === "w") root.setView("week")
         else if (key === "3") root.setView("3day")
         else if (key === "r") root.sync(true)
+        else if (key === "v") {
+          if (root.vacationActive) root.endVacation()
+          else if (root.vacationDialogOpen) root.closeVacationDialog()
+          else root.openVacationDialog()
+        }
       }
 
       // ------------------------------------------------------------ header
@@ -777,6 +909,23 @@ Panel {
             verticalPadding: root.sp(2)
             horizontalPadding: root.sp(5)
             onClicked: root.sync(true)
+          }
+
+          Button {
+            anchors.verticalCenter: parent.verticalCenter
+            iconText: "󱁕"  // nf-md-palm_tree
+            tooltipText: "Vacation mode (v)"
+            selected: root.vacationDialogOpen
+            foreground: root.vacationDialogOpen ? root.foreground : root.dimForeground
+            accent: root.accent
+            fontFamily: root.fontFamily
+            iconSize: root.fontIcon
+            verticalPadding: root.sp(2)
+            horizontalPadding: root.sp(5)
+            onClicked: {
+              if (root.vacationDialogOpen) root.closeVacationDialog()
+              else root.openVacationDialog()
+            }
           }
         }
       }
@@ -1213,7 +1362,7 @@ Panel {
         Text {
           anchors.right: parent.right
           anchors.verticalCenter: parent.verticalCenter
-          text: "d/3/w · t today · r sync"
+          text: "d/3/w · t today · r sync · v away"
           color: root.faintForeground
           font.family: root.fontFamily
           font.pixelSize: root.fontCaption
@@ -1230,6 +1379,232 @@ Panel {
         active: root.selectedEvent !== null
         z: 20
         sourceComponent: eventDetail
+      }
+
+      // ------------------------------------------------ going on vacation
+      Loader {
+        anchors.fill: parent
+        active: root.vacationDialogOpen
+        z: 22
+        sourceComponent: vacationDialog
+      }
+
+      // ------------------------------------------------------- the beach
+      //
+      // Covers the grid entirely while away. It is loaded only while the
+      // popup is open, so nothing animates behind a closed panel.
+      Loader {
+        anchors.fill: parent
+        active: root.vacationActive && root.opened
+        z: 30
+        sourceComponent: beachScene
+      }
+    }
+  }
+
+  Component {
+    id: beachScene
+
+    Item {
+      // The beach is opaque: the header and grid under it are not part of
+      // the holiday.
+      Rectangle {
+        anchors.fill: parent
+        color: Color.popups.background
+        radius: Style.cornerRadius
+      }
+
+      // Swallows clicks so nothing reaches the grid underneath.
+      MouseArea {
+        anchors.fill: parent
+      }
+
+      Beach {
+        anchors.fill: parent
+        host: root
+      }
+    }
+  }
+
+  Component {
+    id: vacationDialog
+
+    Item {
+      readonly property var presets: Model.vacationPresets(root.nowMs)
+
+      // Where the typed date lands, or NaN while it does not parse.
+      property double customUntil: NaN
+      readonly property bool customValid: !isNaN(customUntil) && customUntil > root.nowMs
+
+      function parseCustom(text) {
+        customUntil = Model.parseDateTimeInput(text)
+      }
+
+      MouseArea {
+        anchors.fill: parent
+        onClicked: root.closeVacationDialog()
+      }
+
+      Rectangle {
+        anchors.fill: parent
+        color: Qt.rgba(Color.popups.background.r, Color.popups.background.g,
+                       Color.popups.background.b, 0.88)
+      }
+
+      Rectangle {
+        anchors.centerIn: parent
+        width: Math.min(parent.width - root.sp(24), root.sp(380))
+        height: Math.min(parent.height - root.sp(16),
+                         vacationColumn.implicitHeight + root.sp(28))
+        radius: Style.cornerRadius > 0 ? Style.cornerRadius : root.sp(4)
+        color: Color.popups.background
+        border.width: 1
+        border.color: root.strongHairline
+
+        MouseArea {
+          anchors.fill: parent
+        }
+
+        Button {
+          anchors.top: parent.top
+          anchors.right: parent.right
+          anchors.margins: root.sp(6)
+          z: 2
+          iconText: "󰅖"  // nf-md-close
+          tooltipText: "Close (Esc)"
+          foreground: root.faintForeground
+          accent: root.accent
+          fontFamily: root.fontFamily
+          iconSize: root.fontBodySmall
+          verticalPadding: root.sp(2)
+          horizontalPadding: root.sp(4)
+          onClicked: root.closeVacationDialog()
+        }
+
+        Column {
+          id: vacationColumn
+          anchors.fill: parent
+          anchors.margins: root.sp(14)
+          spacing: root.sp(10)
+
+          Text {
+            width: parent.width - root.sp(22)
+            text: "󱁕  Vacation mode"
+            color: root.foreground
+            font.family: root.fontFamily
+            font.pixelSize: root.fontHeading
+            font.bold: true
+            renderType: Text.NativeRendering
+          }
+
+          Text {
+            width: parent.width
+            wrapMode: Text.Wrap
+            text: root.vacationActive
+              ? "Already away — pick when it ends instead."
+              : "A palm tree takes the meeting's place in the bar, and meetings start without a toast. Click the palm for the beach."
+            color: root.dimForeground
+            font.family: root.fontFamily
+            font.pixelSize: root.fontBodySmall
+            lineHeight: 1.2
+            renderType: Text.NativeRendering
+          }
+
+          Text {
+            text: "COMING BACK"
+            color: root.faintForeground
+            font.family: root.fontFamily
+            font.pixelSize: root.fontCaption
+            font.letterSpacing: 0.6
+            renderType: Text.NativeRendering
+          }
+
+          Column {
+            width: parent.width
+            spacing: root.sp(3)
+
+            Repeater {
+              model: presets
+
+              Button {
+                required property var modelData
+                width: parent.width
+                text: modelData.label + "   — " + modelData.detail
+                iconText: modelData.until > 0 ? "󰃰" : "󰐿"  // calendar_clock / hand
+                leftAlign: true
+                bordered: true
+                selected: root.vacationActive && root.vacationUntil === modelData.until
+                foreground: root.foreground
+                accent: root.accent
+                fontFamily: root.fontFamily
+                fontSize: root.fontCaption
+                verticalPadding: root.sp(4)
+                onClicked: root.startVacation(modelData.until)
+              }
+            }
+          }
+
+          Text {
+            text: "OR A DATE OF YOUR OWN"
+            color: root.faintForeground
+            font.family: root.fontFamily
+            font.pixelSize: root.fontCaption
+            font.letterSpacing: 0.6
+            renderType: Text.NativeRendering
+          }
+
+          Row {
+            width: parent.width
+            spacing: root.sp(6)
+
+            TextField {
+              id: untilField
+              width: parent.width - startButton.width - root.sp(6)
+              anchors.verticalCenter: parent.verticalCenter
+              placeholderText: Model.formatDateTimeInput(
+                Model.addDays(root.todayMs, 7) + 8 * 3600000)
+              text: root.vacationActive && root.vacationUntil > 0
+                ? Model.formatDateTimeInput(root.vacationUntil) : ""
+              foreground: root.foreground
+              accent: root.accent
+              font.family: root.fontFamily
+              font.pixelSize: root.fontBodySmall
+              verticalPadding: root.sp(4)
+              onTextChanged: parseCustom(text)
+              onActiveFocusChanged: root.vacationFieldFocused = activeFocus
+              onAccepted: if (customValid) root.startVacation(customUntil)
+              // The catcher is blocked while typing, so Escape is handled here.
+              Keys.onEscapePressed: root.closeVacationDialog()
+              Component.onCompleted: parseCustom(text)
+            }
+
+            Button {
+              id: startButton
+              anchors.verticalCenter: parent.verticalCenter
+              text: root.vacationActive ? "Set" : "Start"
+              bordered: true
+              enabled: customValid
+              opacity: customValid ? 1 : 0.4
+              foreground: root.foreground
+              accent: root.accent
+              fontFamily: root.fontFamily
+              fontSize: root.fontBodySmall
+              onClicked: if (customValid) root.startVacation(customUntil)
+            }
+          }
+
+          Text {
+            width: parent.width
+            visible: untilField.text.length > 0 && !customValid
+            text: isNaN(customUntil)
+              ? "Try 2026-12-24 08:00 or 24/12/2026 08:00"
+              : "That is already in the past"
+            color: root.accent
+            font.family: root.fontFamily
+            font.pixelSize: root.fontCaption
+            renderType: Text.NativeRendering
+          }
+        }
       }
     }
   }

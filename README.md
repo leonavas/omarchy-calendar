@@ -20,6 +20,10 @@ Click an event to open it, or to join its call.
   day stays on screen with the error in the footer.
 - **Several Google accounts.** Links are pinned to the right account, so you
   never open a meeting as the wrong you.
+- **Vacation mode.** The palm button in the popup (or `v`) swaps the next
+  meeting in the bar for a palm tree, mutes the meeting toasts, and turns the
+  grid into a beach with the sea coming and going. Pick when it ends — tonight,
+  tomorrow, Monday, a date of your own — or end it by hand from the beach.
 
 ## Install
 
@@ -66,6 +70,7 @@ Nothing sensitive lands in this directory: tokens live in
 | Middle click an event | Join that call |
 | `d` `3` `w` | Day / 3-day / week |
 | `t` `r` | Today / sync now |
+| `v` | Vacation mode on (pick an end) / off |
 | `←` `→` `↑` `↓` | Step period / scroll hours |
 | `Esc` | Back out one layer |
 
@@ -75,6 +80,7 @@ Any of it can be bound to a key instead:
 omarchy-shell leonavas.calendar newMeeting
 omarchy-shell leonavas.calendar copyLink   # next meeting's URL to the clipboard
 omarchy-shell leonavas.calendar toggle|today|day|week|refresh|openCalendar
+omarchy-shell leonavas.calendar vacation      # on (until you say so) / off
 ```
 
 ## Settings
