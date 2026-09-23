@@ -30,7 +30,7 @@
     "defaults": {
       "view": "week",
       "workweek": false,
-      "weekStartDay": null,
+      "weekStartDay": "Locale",
       "use24Hour": true,
       "showWeekNumbers": true,
       "showDeclined": true,

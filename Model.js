@@ -725,25 +725,25 @@ function serializeVacation(state) {
 }
 
 // The one-click ways to end a vacation. `until: 0` means "when I say so".
-function vacationPresets(nowMs) {
+function vacationPresets(nowMs, use24Hour) {
   var out = []
   var today = startOfDay(nowMs)
   var endOfDay = today + 18 * HOUR
   if (endOfDay - nowMs > 30 * MINUTE)
-    out.push({ label: "Rest of today", detail: "back at 18:00", until: endOfDay })
+    out.push({ label: "Rest of today", detail: "back at " + formatTime(endOfDay, use24Hour), until: endOfDay })
   var tomorrow = addDays(today, 1) + 8 * HOUR
-  out.push({ label: "Tomorrow morning", detail: shortWeekday(tomorrow) + " 08:00", until: tomorrow })
+  out.push({ label: "Tomorrow morning", detail: shortWeekday(tomorrow) + " " + formatTime(tomorrow, use24Hour), until: tomorrow })
   var weekday = new Date(today).getDay()
   var daysToMonday = ((8 - weekday) % 7) || 7
   var monday = addDays(today, daysToMonday) + 8 * HOUR
-  out.push({ label: "Next Monday", detail: shortMonth(monday) + " " + new Date(monday).getDate() + ", 08:00", until: monday })
+  out.push({ label: "Next Monday", detail: shortMonth(monday) + " " + new Date(monday).getDate() + ", " + formatTime(monday, use24Hour), until: monday })
   var week = addDays(today, 7) + 8 * HOUR
-  out.push({ label: "One week", detail: shortWeekday(week) + " " + shortMonth(week) + " " + new Date(week).getDate() + ", 08:00", until: week })
+  out.push({ label: "One week", detail: shortWeekday(week) + " " + shortMonth(week) + " " + new Date(week).getDate() + ", " + formatTime(week, use24Hour), until: week })
   out.push({ label: "Until I say so", detail: "end it by hand", until: 0 })
   return out
 }
 
-// "2026-09-29 08:00", "2026-09-29" (08:00 assumed), or the Brazilian
+// "2026-09-29 08:00", "2026-09-29" (08:00 assumed), or day-first
 // "29/09/2026 08:00". Returns NaN for anything else.
 function parseDateTimeInput(text) {
   var value = String(text || "").trim()

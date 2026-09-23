@@ -83,7 +83,9 @@ Panel {
   //
   // One cache file, written atomically by the sync script and watched here,
   // so every bar surface repaints off the same fetch.
-  readonly property string statePath: Quickshell.env("HOME") + "/.local/state/omarchy/calendar"
+  // Same directory the scripts in bin/ resolve, XDG_STATE_HOME included.
+  readonly property string statePath: (Quickshell.env("XDG_STATE_HOME") ||
+    Quickshell.env("HOME") + "/.local/state") + "/omarchy/calendar"
   property var cache: Model.parseCache("")
   readonly property var allEvents: cache.events || []
   readonly property var calendars: cache.calendars || []
@@ -1335,7 +1337,7 @@ Panel {
         Text {
           anchors.left: parent.left
           anchors.verticalCenter: parent.verticalCenter
-          width: parent.width - root.sp(90)
+          width: parent.width - footerKeys.implicitWidth - root.sp(16)
           elide: Text.ElideRight
           text: {
             if (root.needsAuth) return "Not connected to Google — click to set up"
@@ -1360,9 +1362,10 @@ Panel {
         }
 
         Text {
+          id: footerKeys
           anchors.right: parent.right
           anchors.verticalCenter: parent.verticalCenter
-          text: "d/3/w · t today · r sync · v away"
+          text: "d/3/w view · t today · r sync · v vacation"
           color: root.faintForeground
           font.family: root.fontFamily
           font.pixelSize: root.fontCaption
@@ -1430,7 +1433,7 @@ Panel {
     id: vacationDialog
 
     Item {
-      readonly property var presets: Model.vacationPresets(root.nowMs)
+      readonly property var presets: Model.vacationPresets(root.nowMs, root.use24Hour)
 
       // Where the typed date lands, or NaN while it does not parse.
       property double customUntil: NaN
@@ -1501,7 +1504,7 @@ Panel {
             width: parent.width
             wrapMode: Text.Wrap
             text: root.vacationActive
-              ? "Already away — pick when it ends instead."
+              ? "You are on vacation — choose a new end."
               : "A palm tree takes the meeting's place in the bar, and meetings start without a toast. Click the palm for the beach."
             color: root.dimForeground
             font.family: root.fontFamily
@@ -1581,7 +1584,7 @@ Panel {
             Button {
               id: startButton
               anchors.verticalCenter: parent.verticalCenter
-              text: root.vacationActive ? "Set" : "Start"
+              text: root.vacationActive ? "Save" : "Start"
               bordered: true
               enabled: customValid
               opacity: customValid ? 1 : 0.4
@@ -1597,7 +1600,7 @@ Panel {
             width: parent.width
             visible: untilField.text.length > 0 && !customValid
             text: isNaN(customUntil)
-              ? "Try 2026-12-24 08:00 or 24/12/2026 08:00"
+              ? "Use YYYY-MM-DD HH:MM or DD/MM/YYYY HH:MM, e.g. 2026-12-24 08:00"
               : "That is already in the past"
             color: root.accent
             font.family: root.fontFamily

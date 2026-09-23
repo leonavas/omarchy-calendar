@@ -17,6 +17,8 @@ import os
 import re
 import sys
 
+# No __pycache__ inside the plugin folder: it is a git checkout.
+sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from gcalcommon import (  # noqa: E402
