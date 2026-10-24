@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "leonavas.calendar",
   "name": "Google Calendar",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "author": "leonavas",
   "license": "MIT",
   "description": "Google Calendar in the bar: what is on now or next as a label, a day/week time grid popup you can click through into meetings, and a vacation mode that swaps it all for a palm tree.",
@@ -45,6 +45,7 @@
       "labelMode": "Next event",
       "glyph": "󰃭",
       "maxLabelChars": 22,
+      "leadMinutes": 15,
       "warnMinutes": 5,
       "hideWhenEmpty": false,
       "joinOnMiddleClick": true,
@@ -221,18 +222,29 @@
         "description": "Longer titles are elided, so one long meeting name cannot push the rest of the bar around."
       },
       {
+        "key": "leadMinutes",
+        "type": "integer",
+        "label": "Show an event in the bar this long before it starts (minutes)",
+        "min": 0,
+        "max": 240,
+        "step": 1,
+        "defaultValue": 15,
+        "description": "Outside that window the bar shows only the glyph; hover it to see what is next."
+      },
+      {
         "key": "warnMinutes",
         "type": "integer",
-        "label": "Colour the label this long before an event (minutes)",
+        "label": "Yellow window around an event's start (minutes)",
         "min": 0,
         "max": 60,
         "step": 1,
-        "defaultValue": 5
+        "defaultValue": 5,
+        "description": "The label turns yellow this long before an event starts and stays until this long after, then hands over to the next event (if it is within the lead window)."
       },
       {
         "key": "hideWhenEmpty",
         "type": "boolean",
-        "label": "Remove the widget from the bar when nothing is scheduled",
+        "label": "Remove the widget from the bar when no event is coming up",
         "defaultValue": false
       },
       {

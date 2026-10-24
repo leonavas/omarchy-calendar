@@ -1,5 +1,6 @@
 import QtQuick
 import Quickshell
+import Quickshell.Io
 import qs.Commons
 import qs.Ui
 import "Model.js" as Model
@@ -18,6 +19,7 @@ BarWidget {
   readonly property string labelMode: String(setting("labelMode", "Next event"))
   readonly property string glyph: String(setting("glyph", "󰃭"))
   readonly property int maxLabelChars: Math.max(6, Number(setting("maxLabelChars", 22)))
+  readonly property int leadMinutes: Math.max(0, Number(setting("leadMinutes", 15)))
   readonly property int warnMinutes: Math.max(0, Number(setting("warnMinutes", 5)))
   readonly property bool hideWhenEmpty: Model.truthy(setting("hideWhenEmpty", false), false)
   readonly property bool joinOnMiddleClick: Model.truthy(setting("joinOnMiddleClick", true), true)
@@ -30,12 +32,14 @@ BarWidget {
   readonly property bool needsAuth: panel ? panel.needsAuth === true : false
   readonly property bool vacation: panel ? panel.vacationActive === true : false
 
-  // The one event the bar speaks for: whatever is running, handing over to
-  // the next one once it is close enough to need leaving for.
-  readonly property var subject: Model.barEvent(root.events, root.nowMs)
+  // The one event the bar speaks for: shown from leadMinutes before it starts
+  // until warnMinutes after. Outside that window the bar is just the glyph.
+  readonly property var subject: Model.barSubject(root.events, root.nowMs,
+    root.leadMinutes * 60000, root.warnMinutes * 60000)
   readonly property bool hasSubject: root.subject !== null && root.subject !== undefined
+  // Yellow from warnMinutes before the start to warnMinutes after; the subject
+  // is already gone past the latter, so only the lower edge needs checking.
   readonly property bool imminent: root.hasSubject &&
-    root.subject.start > root.nowMs &&
     root.subject.start - root.nowMs <= root.warnMinutes * 60000
   readonly property bool running: root.hasSubject &&
     root.subject.start <= root.nowMs && root.subject.end > root.nowMs
@@ -43,7 +47,7 @@ BarWidget {
   // The text of the event itself, without the glyph.
   readonly property string eventLabel: {
     if (root.needsAuth) return "calendar"
-    if (!root.hasSubject) return "no events"
+    if (!root.hasSubject) return ""
     var title = Model.truncate(root.subject.summary, root.maxLabelChars)
     if (root.labelMode === "Countdown")
       return title + " " + Model.relativeLabel(root.subject.start, root.nowMs,
@@ -63,7 +67,7 @@ BarWidget {
   readonly property string label: {
     // Away: the palm tree stands in for the meeting, and says nothing else.
     if (root.vacation) return root.palmGlyph
-    if (root.iconOnly) return root.glyph
+    if (root.iconOnly || root.eventLabel === "") return root.glyph
     return root.glyph + "  " + root.eventLabel
   }
 
@@ -72,8 +76,13 @@ BarWidget {
       return "On vacation — " + Model.vacationUntilLabel(
         panel.vacationUntil, root.nowMs, panel.use24Hour) + "\nclick for the beach"
     if (root.needsAuth) return "Google Calendar — not connected yet"
-    if (!root.hasSubject)
-      return "Google Calendar — nothing scheduled\n" + root.rightClickHint
+    if (!root.hasSubject) {
+      var next = Model.nextEvent(root.events, root.nowMs)
+      if (!next) return "Google Calendar — nothing scheduled\n" + root.rightClickHint
+      return "Next: " + next.summary + "\n" +
+        Model.formatRange(next, panel ? panel.use24Hour : true) + "\n" +
+        Model.relativeLabel(next.start, root.nowMs, true) + "\n" + root.rightClickHint
+    }
     var parts = [root.subject.summary]
     parts.push(Model.formatRange(root.subject, panel ? panel.use24Hour : true))
     if (root.running) parts.push("on now")
@@ -151,6 +160,21 @@ BarWidget {
     if ("hostWidget" in target) target.hostWidget = root
   }
 
+  // The theme's yellow; the shell only exposes red (urgent), so it is read
+  // straight from colors.toml.
+  property color yellow: "#e0af68"
+
+  FileView {
+    path: Quickshell.env("HOME") + "/.local/state/omarchy/current/theme/colors.toml"
+    watchChanges: true
+    printErrors: false
+    onFileChanged: reload()
+    onLoaded: {
+      var match = String(text()).match(/^\s*(?:yellow|color3)\s*=\s*["']?(#[0-9A-Fa-f]{6})/m)
+      if (match) root.yellow = match[1]
+    }
+  }
+
   // ---------------------------------------------------------------- layout
   visible: root.vacation || !(root.hideWhenEmpty && !root.hasSubject && !root.needsAuth)
   implicitWidth: root.visible ? button.implicitWidth : 0
@@ -178,9 +202,11 @@ BarWidget {
     labelVisible: true
     hasVisualContent: root.label !== ""
     tooltipText: root.tooltip
-    // Urgent while a meeting is about to start — the one moment the widget
-    // has something to say that is worth interrupting the bar's colour for.
+    // Yellow around a meeting's start — the one moment the widget has
+    // something to say that is worth interrupting the bar's colour for. Red is
+    // kept for a calendar that still needs connecting.
     active: (root.imminent && !root.vacation) || root.needsAuth
+    activeColor: root.needsAuth ? (root.bar ? root.bar.urgent : Color.urgent) : root.yellow
     useActiveColor: true
     horizontalMargin: 8.75
     verticalPadding: 8.75

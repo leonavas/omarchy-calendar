@@ -8,9 +8,10 @@ It is read-only: it never creates, edits or deletes an event in your calendar.
 
 ## What it does
 
-- **What is on now or next, in the bar.** `10:00 Standup`, or `Standup in 12m`
-  in countdown mode. The label turns the accent colour a few minutes before a
-  meeting starts.
+- **What is coming up, in the bar.** `10:00 Standup`, or `Standup in 12m`
+  in countdown mode, from 15 minutes before a meeting until 5 minutes after it
+  starts; the rest of the time just the glyph. The label turns yellow from 5
+  minutes before to 5 minutes after the start.
 - **A toast when a meeting starts.** Click it to land straight in the call (or
   on the event in Google Calendar when it has no call). It stays for 20 seconds.
   Declined and all-day events never toast.
@@ -304,8 +305,9 @@ Set them in Setup > Plugins, or inline on the widget's entry in
 | `labelMode` | `Next event` | `Next event`, `Countdown` or `Icon only` |
 | `glyph` | `󰃭` | Nerd Font glyph before the label |
 | `maxLabelChars` | `22` | Longest event title in the bar before it is cut |
-| `warnMinutes` | `5` | Colour the label this many minutes before a meeting |
-| `hideWhenEmpty` | `false` | Hide the widget when nothing is scheduled |
+| `leadMinutes` | `15` | Show an event in the bar only this many minutes before it starts; otherwise just the glyph |
+| `warnMinutes` | `5` | Label is yellow from this many minutes before a meeting to this many after, then hands over to the next one |
+| `hideWhenEmpty` | `false` | Hide the widget when no event is within the lead window |
 | `joinOnMiddleClick` | `true` | Middle click joins the next meeting |
 | `rightClickAction` | `New meeting` | `New meeting`, `Sync now` or `Open Google Calendar` |
 | `copyMeetingLink` | `true` | Copy the link of a meeting started from the bar |

@@ -475,6 +475,28 @@ function barEvent(events, nowMs) {
   return running || upcoming
 }
 
+// The event the bar label shows: only from leadMs before it starts until
+// graceMs after (or its end, if sooner). When two overlap, the one whose start
+// is nearest to now wins, so a meeting about to begin takes over from one
+// that began a few minutes ago. Null means the bar shows just the glyph.
+function barSubject(events, nowMs, leadMs, graceMs) {
+  var best = null
+  var bestDistance = 0
+  for (var i = 0; i < events.length; i++) {
+    var event = events[i]
+    if (isAllDay(event) || isDeclined(event)) continue
+    if (event.start - leadMs > nowMs) continue
+    if (nowMs >= Math.min(event.start + graceMs, event.end)) continue
+    var distance = Math.abs(event.start - nowMs)
+    if (!best || distance < bestDistance ||
+        (distance === bestDistance && event.start > best.start)) {
+      best = event
+      bestDistance = distance
+    }
+  }
+  return best
+}
+
 function truncate(text, limit) {
   var value = String(text || "")
   if (limit <= 0 || value.length <= limit) return value
