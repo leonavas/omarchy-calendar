@@ -22,7 +22,8 @@ sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from gcalcommon import (  # noqa: E402
-    EVENTS_FILE, AuthError, api_get, eprint, read_json, write_json_private)
+    EVENTS_FILE, AuthError, api_get, can_write, eprint, read_json,
+    write_json_private)
 
 # Google's own event palette, keyed by the colorId an event carries. Fetched
 # from /colors at runtime; this is the fallback for when that call is the one
@@ -151,8 +152,12 @@ def self_response(event):
     for attendee in event.get("attendees", []) or []:
         if attendee.get("self"):
             return attendee.get("responseStatus", "needsAction")
-    # No attendee list means a personal event: you are implicitly going.
-    return "accepted" if event.get("attendees") is None else "needsAction"
+    # No attendee list means a personal event, and an event you organise
+    # without listing yourself (as the API creates them) is yours too: you
+    # are implicitly going.
+    if event.get("attendees") is None or (event.get("organizer") or {}).get("self"):
+        return "accepted"
+    return "needsAction"
 
 
 def normalize_attendees(event):
@@ -214,7 +219,16 @@ def normalize_event(event, calendar, event_colors):
         "meetingProvider": provider_for(url),
         "htmlLink": event.get("htmlLink", ""),
         "recurring": bool(event.get("recurringEventId")),
+        "recurringEventId": event.get("recurringEventId", ""),
+        # Who may change it from here: the organizer, or guests the organizer
+        # allowed to modify the event.
+        "organizerSelf": bool((event.get("organizer") or {}).get("self")),
+        "guestsCanModify": bool(event.get("guestsCanModify")),
         "transparent": event.get("transparency") == "transparent",
+        # default, outOfOffice, focusTime, workingLocation, birthday,
+        # fromGmail. Time blocked off for yourself is drawn apart from
+        # meetings and never takes the bar.
+        "eventType": event.get("eventType", "default"),
     }
 
 
@@ -333,6 +347,7 @@ def main():
         "windowEnd": int(time_max.timestamp() * 1000),
         "error": None,
         "needsAuth": False,
+        "canWrite": can_write(),
         "account": "",
         "calendars": [],
         "events": [],
@@ -375,6 +390,12 @@ def main():
         return 1
 
     write_result(result)
+    # Names and photos of colleagues, at most once a day; never fails the sync.
+    try:
+        from gcalpeople import refresh_people
+        refresh_people()
+    except Exception as error:  # noqa: BLE001
+        eprint("gcal-sync: people: %s" % error)
     if args.to_stdout:
         import json
         print(json.dumps(result, ensure_ascii=False))

@@ -1,0 +1,22 @@
+#!/usr/bin/env python3
+"""Refresh the directory copy (names and photos) now: bin/gcal-people"""
+
+import os
+import sys
+
+sys.dont_write_bytecode = True
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from gcalcommon import read_json  # noqa: E402
+from gcalpeople import PEOPLE_FILE, can_read_directory, refresh_people  # noqa: E402
+
+if not can_read_directory():
+    print("The directory permission is not granted yet — run bin/gcal-auth.")
+    sys.exit(3)
+count = refresh_people(force=True)
+error = (read_json(PEOPLE_FILE) or {}).get("error")
+if error:
+    print("gcal-people: %s" % error)
+    sys.exit(1)
+with_photo = sum(1 for p in (read_json(PEOPLE_FILE) or {}).get("people", []) if p.get("photo"))
+print("%d people, %d with a photo" % (count, with_photo))

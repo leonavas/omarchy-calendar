@@ -4,17 +4,24 @@ A Google Calendar bar widget for the Omarchy shell: your next meeting in the
 bar, and a day / 3-day / week time grid behind a click. Click an event to see
 it, or join its call in one gesture.
 
-It is read-only: it never creates, edits or deletes an event in your calendar.
+It reads your calendar, and writes to it only when you ask from the panel:
+create a meeting, answer an invitation, change an event's title, time or
+guests, or delete it — choosing each time whether Google emails the guests.
 
 ## What it does
 
 - **What is coming up, in the bar.** `10:00 Standup`, or `Standup in 12m`
   in countdown mode, from 15 minutes before a meeting until 5 minutes after it
   starts; the rest of the time just the glyph. The label turns yellow from 5
-  minutes before to 5 minutes after the start.
+  minutes before to 5 minutes after the start. Only events you said **yes** to
+  (or your own) take the bar: maybes and unanswered invitations stay in the
+  grid but never reach the bar or a toast.
+- **Hover the bar for a card, not a tooltip.** What is on now or next, how
+  long until it starts, a **Join** button that drops you straight into the
+  call, and the next two things today — click one to open it in the popup.
 - **A toast when a meeting starts.** Click it to land straight in the call (or
   on the event in Google Calendar when it has no call). It stays for 20 seconds.
-  Declined and all-day events never toast.
+  Declined, maybe, unanswered and all-day events never toast.
 - **Join without hunting for the link.** Middle click the bar to join the next
   meeting, or middle click any event in the grid. Meet, Zoom, Teams, Webex,
   Whereby, Chime, GoToMeeting, BlueJeans and Around links are recognised —
@@ -22,15 +29,41 @@ It is read-only: it never creates, edits or deletes an event in your calendar.
 - **Start a meeting in one gesture.** Right click the bar opens a new Google
   Meet as your calendar's account, and puts the link on the clipboard once the
   room exists.
-- **The real grid, not a list.** Day, 3-day and week views, an all-day band,
-  ISO week numbers, a current-time line, and your Google colours. Accepted
-  invitations are solid, unanswered ones outlined, declined ones faded and
-  struck through.
+- **The real grid, not a list.** Day, 3-day, week and month views (in the
+  month, click a date or "+N more" to open that day), an all-day band,
+  ISO week numbers, a current-time line with the time in the gutter, and your
+  Google colours. Accepted invitations are a deep tone of their calendar,
+  unanswered ones a pale wash with an outline, maybes paler still, declined
+  ones struck through; what is already over steps back. The popup never takes
+  more than about 60% of the screen and opens on the working day.
 - **Right the instant you look.** A background sync keeps a local cache warm.
   If a sync fails (offline, token expired), the last good data stays on screen
   and the error shows in the popup's footer.
 - **Several Google accounts.** Links are pinned to the right account with
   `authuser=`, so you never open a meeting as the wrong you.
+- **Schedule a meeting without leaving the desktop.** **New** in the popup's
+  header, `n`, or a click on an empty slot of the grid opens a card: title,
+  when (or **Now**), duration, guests, description and a Google Meet link.
+  Guests autocomplete from everyone who has been on an invitation with you
+  (most frequent first) and, on a Workspace account, the whole organisation's
+  directory — with their photos; a full address you type is invited as is. Google sends
+  the invitations. A meeting that starts now opens straight into the call;
+  one for later puts its link on the clipboard.
+- **Answer an invitation.** The card of a meeting you were invited to asks
+  **Yes / Maybe / No**, with the current answer lifted out; on a recurring
+  meeting, **All events** answers for the whole series. The organiser sees
+  your answer as with any reply; nobody is emailed from here.
+- **Change or delete an event.** On its card, hover a guest and click
+  **Remove** — the change waits under the list until you **Save, no email**
+  or **Save & email**; **Add people** and **Edit** (`e`) open the full editor
+  (title, time, guests, with everyone's own answer kept). **Delete** (`Del`)
+  asks first, Google-style: email the cancellation to the guests, or don't. Recurring events ask whether it is
+  this one or the whole series. Only events you organise (or whose organiser
+  lets guests modify) can be edited; others can be removed from your
+  calendar. Creating and saving have the same **Email guests** switch.
+- **Blocked time stays out of the way.** Out-of-office (a lunch with
+  auto-decline), focus time and working location are drawn as quiet grey
+  blocks and never take the bar, the hover card or a toast.
 - **Vacation mode.** See [below](#vacation-mode).
 
 ## Interactions
@@ -39,6 +72,7 @@ In the bar:
 
 | Gesture | What it does |
 |---|---|
+| Hover | Card with the next meeting and a **Join** button |
 | Left click | Opens the grid (or the beach, on vacation) |
 | Middle click | Joins the next meeting; syncs instead when it has no call |
 | Right click | New Google Meet, link copied (configurable: sync, or open Google Calendar) |
@@ -48,9 +82,12 @@ In the popup:
 
 | Key / gesture | What it does |
 |---|---|
-| Click an event | Opens its card: join, copy link, open in Google, guests, location, description |
+| Click an event | Opens its card, with **Join** up front: one click (or `Enter`) and the call opens in its own window, as the calendar's account |
 | Middle click an event | Joins that call |
-| `d` `3` `w` | Day / 3-day / week view |
+| `Enter` / `c` / `o` on a card | Join the call / copy its link / open it in Google Calendar |
+| `n`, or click an empty slot | New meeting (in its card: `Enter` adds a guest, `Ctrl+Enter` creates) |
+| `e` / `Del` on a card | Edit the event / delete it (asks, and whether to email the guests) |
+| `d` `3` `w` `m` | Day / 3-day / week / month view |
 | `t` | Back to today |
 | `r` | Sync now |
 | `v` | Vacation mode: pick an end, or end it if already on |
@@ -62,7 +99,9 @@ Everything can also be bound to a Hyprland key through the shell's IPC:
 
 ```bash
 omarchy-shell leonavas.calendar toggle        # open / close the popup
-omarchy-shell leonavas.calendar today         # also: day, week
+omarchy-shell leonavas.calendar next          # open on the next meeting's card; Enter joins
+omarchy-shell leonavas.calendar compose       # open on the New meeting card
+omarchy-shell leonavas.calendar today         # also: day, week, month
 omarchy-shell leonavas.calendar refresh       # sync now
 omarchy-shell leonavas.calendar newMeeting    # new Meet, link on the clipboard
 omarchy-shell leonavas.calendar copyLink      # next meeting's link to the clipboard
@@ -138,7 +177,8 @@ widget shows **calendar** until you connect Google.
 
 Google only lets an app read your calendar through an OAuth client that *you*
 own. So you create a small Google Cloud project with one client in it; the
-plugin uses that client to ask you for read-only access. It costs nothing and
+plugin uses that client to ask you for access to read your calendars and to
+create events. It costs nothing and
 needs no billing account.
 
 > Google renamed these screens in 2025: what older guides call the
@@ -168,10 +208,14 @@ yours unique. Using an existing project is fine too.
 <https://console.cloud.google.com/apis/library/calendar-json.googleapis.com>
 and click **Enable**.
 
+For photos and organisation-wide guest search on a Workspace account, also
+enable the People API:
+<https://console.cloud.google.com/apis/library/people.googleapis.com>.
+
 **Or with gcloud:**
 
 ```bash
-gcloud services enable calendar-json.googleapis.com
+gcloud services enable calendar-json.googleapis.com people.googleapis.com
 gcloud services list --enabled | grep calendar    # should print calendar-json.googleapis.com
 ```
 
@@ -195,11 +239,15 @@ gcloud services list --enabled | grep calendar    # should print calendar-json.g
    <https://console.cloud.google.com/auth/audience>, under **Test users** click
    **Add users**, enter the Google address whose calendar you want in the bar,
    **Save**.
-6. **Add the scope:** open <https://console.cloud.google.com/auth/scopes>,
-   click **Add or remove scopes**, filter for `calendar.readonly`, tick
+6. **Add the scopes:** open <https://console.cloud.google.com/auth/scopes>,
+   click **Add or remove scopes**, filter for `calendar`, tick
    `https://www.googleapis.com/auth/calendar.readonly`
-   (*See and download any calendar you can access using your Google Calendar*),
-   **Update**, then **Save** at the bottom of the page.
+   (*See and download any calendar you can access using your Google Calendar*)
+   and `https://www.googleapis.com/auth/calendar.events`
+   (*View and edit events on all your calendars* — used only for the
+   changes you make from the panel), and on a Workspace account
+   `https://www.googleapis.com/auth/directory.readonly` (colleagues' names and
+   photos), **Update**, then **Save** at the bottom of the page.
 
 ### 4. Create the OAuth client (console only)
 
@@ -287,21 +335,22 @@ Set them in Setup > Plugins, or inline on the widget's entry in
 
 | Key | Default | What it does |
 |---|---|---|
-| `view` | `week` | View the popup opens on: `day`, `3day`, `week` |
+| `view` | `week` | View the popup opens on: `day`, `3day`, `week`, `month` |
 | `workweek` | `false` | Week view shows Monday to Friday only |
 | `weekStartDay` | `Locale` | `Locale`, `Sunday` or `Monday` |
 | `use24Hour` | `true` | 24-hour clock |
 | `showWeekNumbers` | `true` | ISO week number above the hour labels |
 | `showDeclined` | `true` | Show declined events, faded and struck through |
+| `eventColors` | `Google Calendar` | `Omarchy theme` repaints events from the active theme: your calendar in the accent, the others in the nearest theme hue; follows theme switches |
 | `contentScale` | `125` | Scale of everything in the popup (%) |
 | `hourHeight` | `40` | Height of one hour row (px, before scaling) |
-| `gridHeight` | `540` | Visible grid height before it scrolls (px, before scaling) |
+| `gridHeight` | `420` | Visible grid height before it scrolls (px, before scaling; capped at ~60% of the screen) |
 | `scrollToHour` | `8` | Hour the grid opens on for days other than today |
 | `syncMinutes` | `5` | Background sync interval |
 | `daysBack` | `14` | Days of history fetched |
 | `daysAhead` | `90` | Days ahead fetched |
 | `meetingOpenMode` | `App window` | `App window` (own window via `omarchy-launch-webapp`) or `Browser tab` |
-| `googleAccounts` | `""` | Other Google accounts you are signed into, comma-separated, offered when joining |
+| `googleAccounts` | `""` | Other Google accounts you are signed into, comma-separated, offered behind the card's **as…** button |
 | `labelMode` | `Next event` | `Next event`, `Countdown` or `Icon only` |
 | `glyph` | `󰃭` | Nerd Font glyph before the label |
 | `maxLabelChars` | `22` | Longest event title in the bar before it is cut |
@@ -353,6 +402,9 @@ directory `0700`, files `0600`:
 - `events.json` — the event cache the widget draws from: titles, times,
   locations, descriptions, guests and meeting links for the fetched window.
   Rewritten on every sync.
+- `people.json` and `photos/` — your organisation's directory (names,
+  addresses) and small profile photos, refreshed at most once a day by the
+  sync; `bin/gcal-people` refreshes it now.
 - `vacation.json` — vacation on/off and its end. Written when you start or end
   vacation.
 
@@ -362,8 +414,11 @@ touched, and nothing is written into the plugin folder.
 
 ## Privacy
 
-- **Scope:** `calendar.readonly` only. The plugin cannot create, change or
-  delete events, and cannot read your email or anything else.
+- **Scopes:** `calendar.readonly` to draw the grid, and `calendar.events` to
+  create, change or delete events when you ask from the panel
+  (`bin/gcal-event`) — never on its own. `directory.readonly` reads your
+  organisation's directory (names, addresses, photos) for avatars and guest
+  search; it never reads your email or personal contacts.
 - **Network:** only Google — `accounts.google.com` and `oauth2.googleapis.com`
   for sign-in and token refresh, `www.googleapis.com/calendar/v3` for calendars
   and events. No other server, no telemetry.
@@ -379,7 +434,8 @@ touched, and nothing is written into the plugin folder.
 |---|---|
 | Bar says **calendar**, footer says *Not connected to Google* | Run `bin/gcal-auth` (setup above), or click the footer |
 | `Error 403: access_denied` in the browser | External app in Testing and this account is not a test user — add it (step 3.5) |
-| *This app is blocked* / scope not shown on consent | The `calendar.readonly` scope was not saved under Data Access (step 3.6) |
+| *This app is blocked* / scope not shown on consent | The scopes were not saved under Data Access (step 3.6) |
+| **New meeting** says the calendar is connected read-only | The grant predates creating meetings: click **Reconnect Google** on the card (or run `bin/gcal-auth`) and allow the extra permission |
 | `Google Calendar API has not been used in project … or it is disabled` | Enable the API (step 2) in the *same* project as the client; wait a minute |
 | `HTTP 400: invalid_grant` after about a week | Testing-mode token expired — run `bin/gcal-auth`, then publish the app (step 6) |
 | `Google issued no refresh token` | Delete the app's access at <https://myaccount.google.com/connections> and run `gcal-auth` again |

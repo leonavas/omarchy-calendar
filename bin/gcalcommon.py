@@ -19,9 +19,15 @@ AUTH_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth"
 TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
 API_BASE = "https://www.googleapis.com/calendar/v3"
 
-# Read-only is all the widget ever needs: it draws the calendar and opens
-# meeting links, it never writes an event back.
-SCOPE = "https://www.googleapis.com/auth/calendar.readonly"
+# Reading draws the calendar; calendar.events is what lets the panel create,
+# change and delete events when you ask (bin/gcal-event). Nothing else is ever
+# written: no calendar settings, no other account data.
+READ_SCOPE = "https://www.googleapis.com/auth/calendar.readonly"
+WRITE_SCOPE = "https://www.googleapis.com/auth/calendar.events"
+# Colleagues' names and photos from the Workspace directory (gcalpeople.py),
+# for avatars and for finding people to invite.
+DIRECTORY_SCOPE = "https://www.googleapis.com/auth/directory.readonly"
+SCOPE = " ".join([READ_SCOPE, WRITE_SCOPE, DIRECTORY_SCOPE])
 
 STATE_DIR = os.path.join(
     os.environ.get("XDG_STATE_HOME", os.path.expanduser("~/.local/state")),
@@ -175,6 +181,46 @@ def api_get(path, params=None, token=None, retry_auth=True):
         # a genuinely dead grant.
         return api_get(path, params=params, token=access_token(force=True),
                        retry_auth=False)
+
+
+def granted_scopes():
+    credentials = read_json(CREDENTIALS_FILE) or {}
+    return str(credentials.get("scope") or "").split()
+
+
+def can_write():
+    """Whether the stored grant includes creating events.
+
+    Older grants were read-only; they keep working for the grid, and the
+    panel offers a reconnect when you first try to create something.
+    """
+    granted = granted_scopes()
+    return WRITE_SCOPE in granted or "https://www.googleapis.com/auth/calendar" in granted
+
+
+def api_send(method, path, body=None, params=None, token=None, retry_auth=True):
+    """POST / PATCH / DELETE against the Calendar API, JSON in and out,
+    refreshing the token once on a 401."""
+    url = API_BASE + path
+    if params:
+        url += "?" + urllib.parse.urlencode(params, doseq=True)
+    bearer = token or access_token()
+    headers = {"Authorization": "Bearer " + bearer}
+    data = None
+    if body is not None:
+        data = json.dumps(body).encode("utf-8")
+        headers["Content-Type"] = "application/json"
+    try:
+        return http_json(url, data=data, method=method, headers=headers)
+    except AuthError:
+        if not retry_auth:
+            raise
+        return api_send(method, path, body=body, params=params,
+                        token=access_token(force=True), retry_auth=False)
+
+
+def api_post(path, body, params=None):
+    return api_send("POST", path, body=body, params=params)
 
 
 def eprint(*args):

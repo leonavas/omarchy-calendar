@@ -1,0 +1,212 @@
+#!/usr/bin/env python3
+"""Create, change or delete one event — the panel's only way of writing.
+
+Called with one JSON argument and prints one JSON line back:
+
+  create  {"action": "create", "summary", "start", "end", "attendees": [email],
+           "meet": true, "description", "notify": true}
+  update  {"action": "update", "calendarId", "eventId", "recurringEventId",
+           "scope": "instance" | "series", "summary", "start", "end",
+           "attendees": [email], "notify": true}
+  delete  {"action": "delete", "calendarId", "eventId", "recurringEventId",
+           "scope": "instance" | "series", "notify": true}
+  respond {"action": "respond", "calendarId", "eventId", "recurringEventId",
+           "scope": "instance" | "series",
+           "response": "accepted" | "tentative" | "declined"}
+
+`notify` is Google's sendUpdates: true emails the guests (invitations,
+updates, cancellations), false changes the calendar silently.
+
+Reply: {"ok": true, ...} or {"ok": false, "error", "needsScope"}; exit
+status 0, 1, or 3 when the write permission is missing (run gcal-auth).
+"""
+
+import datetime as dt
+import json
+import os
+import secrets
+import sys
+import urllib.parse
+
+# No __pycache__ inside the plugin folder: it is a git checkout.
+sys.dont_write_bytecode = True
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from gcalcommon import AuthError, api_get, api_send, can_write  # noqa: E402
+
+
+def iso(ms):
+    return dt.datetime.fromtimestamp(ms / 1000).astimezone().isoformat()
+
+
+def local_zone():
+    # The IANA name Google wants for the event's own zone; the offset in the
+    # ISO strings is what actually places it, so a missing name is harmless.
+    try:
+        target = os.path.realpath("/etc/localtime")
+        if "/zoneinfo/" in target:
+            return target.split("/zoneinfo/", 1)[1]
+    except OSError:
+        pass
+    return None
+
+
+def when(ms):
+    body = {"dateTime": iso(ms)}
+    zone = local_zone()
+    if zone:
+        body["timeZone"] = zone
+    return body
+
+
+def q(value):
+    return urllib.parse.quote(str(value), safe="")
+
+
+def send_updates(request, has_guests=True):
+    return "all" if request.get("notify", True) and has_guests else "none"
+
+
+def target_id(request):
+    if request.get("scope") == "series" and request.get("recurringEventId"):
+        return request["recurringEventId"]
+    return request.get("eventId", "")
+
+
+def merge_attendees(existing, wanted):
+    """The new guest list, keeping everyone's own answer.
+
+    Google replaces the whole list on a patch, so each guest who stays is sent
+    back as Google had them (response, optional flag, name); new addresses go
+    in fresh; you and the meeting rooms are always kept.
+    """
+    by_email = {}
+    for attendee in existing or []:
+        by_email[str(attendee.get("email", "")).lower()] = attendee
+    out = []
+    for attendee in existing or []:
+        if attendee.get("self") or attendee.get("resource") or attendee.get("organizer"):
+            out.append(attendee)
+    kept = {str(a.get("email", "")).lower() for a in out}
+    for email in wanted:
+        key = str(email).lower()
+        if not key or key in kept:
+            continue
+        out.append(by_email.get(key) or {"email": key})
+        kept.add(key)
+    return out
+
+
+def create(request):
+    start, end = int(request.get("start") or 0), int(request.get("end") or 0)
+    if start <= 0 or end <= start:
+        return {"ok": False, "error": "the meeting needs a start and an end"}
+    guests = [{"email": e} for e in request.get("attendees") or [] if e]
+    body = {
+        "summary": str(request.get("summary") or "").strip() or "Meeting",
+        "start": when(start),
+        "end": when(end),
+        "attendees": guests,
+        "reminders": {"useDefault": True},
+    }
+    description = str(request.get("description") or "").strip()
+    if description:
+        body["description"] = description
+    if request.get("meet", True):
+        body["conferenceData"] = {"createRequest": {
+            "requestId": secrets.token_hex(12),
+            "conferenceSolutionKey": {"type": "hangoutsMeet"},
+        }}
+    created = api_send("POST", "/calendars/primary/events", body, params={
+        "conferenceDataVersion": 1,
+        "sendUpdates": send_updates(request, bool(guests)),
+    })
+    meeting = created.get("hangoutLink") or ""
+    for entry in (created.get("conferenceData") or {}).get("entryPoints") or []:
+        if entry.get("entryPointType") == "video":
+            meeting = entry.get("uri") or meeting
+    return {"ok": True, "id": created.get("id", ""),
+            "htmlLink": created.get("htmlLink", ""), "meetingUrl": meeting}
+
+
+def update(request):
+    calendar = request.get("calendarId") or "primary"
+    event_id = target_id(request)
+    path = "/calendars/%s/events/%s" % (q(calendar), q(event_id))
+    current = api_get(path)
+    body = {}
+    if request.get("summary") is not None:
+        body["summary"] = str(request["summary"]).strip() or current.get("summary", "")
+    # A series keeps its own times: moving every instance from here would
+    # need the recurrence rule rewritten, which is Google Calendar's job.
+    if request.get("scope") != "series" and request.get("start") and request.get("end"):
+        body["start"] = when(int(request["start"]))
+        body["end"] = when(int(request["end"]))
+    had_guests = len([a for a in current.get("attendees") or [] if not a.get("self")]) > 0
+    if request.get("attendees") is not None:
+        body["attendees"] = merge_attendees(current.get("attendees"), request["attendees"])
+    has_guests = had_guests or len(request.get("attendees") or []) > 0
+    api_send("PATCH", path, body, params={"sendUpdates": send_updates(request, has_guests)})
+    return {"ok": True}
+
+
+def respond(request):
+    """Your own answer to an invitation: yes, maybe or no.
+
+    Only your own entry in the guest list changes; everyone else is sent back
+    exactly as Google had them. The answer shows in the organiser's calendar
+    the way any reply does; no one is emailed from here.
+    """
+    answer = request.get("response")
+    if answer not in ("accepted", "tentative", "declined"):
+        return {"ok": False, "error": "unknown response"}
+    calendar = request.get("calendarId") or "primary"
+    path = "/calendars/%s/events/%s" % (q(calendar), q(target_id(request)))
+    current = api_get(path)
+    attendees = current.get("attendees") or []
+    mine = [a for a in attendees if a.get("self")]
+    if not mine:
+        return {"ok": False, "error": "you are not on this event's guest list"}
+    for attendee in mine:
+        attendee["responseStatus"] = answer
+    api_send("PATCH", path, {"attendees": attendees}, params={"sendUpdates": "none"})
+    return {"ok": True}
+
+
+def delete(request):
+    calendar = request.get("calendarId") or "primary"
+    path = "/calendars/%s/events/%s" % (q(calendar), q(target_id(request)))
+    api_send("DELETE", path, params={"sendUpdates": send_updates(request)})
+    return {"ok": True}
+
+
+def main():
+    try:
+        request = json.loads(sys.argv[1]) if len(sys.argv) > 1 else {}
+    except ValueError:
+        request = {}
+    action = request.get("action")
+    if action not in ("create", "update", "delete", "respond"):
+        print(json.dumps({"ok": False, "error": "bad request"}))
+        return 1
+    if not can_write():
+        print(json.dumps({"ok": False, "needsScope": True,
+                          "error": "Calendar is connected read-only"}))
+        return 3
+    try:
+        result = {"create": create, "update": update, "delete": delete,
+                  "respond": respond}[action](request)
+    except AuthError as error:
+        result = {"ok": False, "needsScope": True, "error": str(error)}
+    except Exception as error:  # noqa: BLE001 - offline, API error
+        message = str(error)
+        scope = "insufficient" in message.lower()
+        result = {"ok": False, "needsScope": scope, "error": message}
+    print(json.dumps(result, ensure_ascii=False))
+    if result.get("ok"):
+        return 0
+    return 3 if result.get("needsScope") else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

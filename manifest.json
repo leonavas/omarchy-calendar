@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "leonavas.calendar",
   "name": "Google Calendar",
-  "version": "1.2.0",
+  "version": "1.10.0",
   "author": "leonavas",
   "license": "MIT",
   "description": "Google Calendar in the bar: what is on now or next as a label, a day/week time grid popup you can click through into meetings, and a vacation mode that swaps it all for a palm tree.",
@@ -34,8 +34,9 @@
       "use24Hour": true,
       "showWeekNumbers": true,
       "showDeclined": true,
+      "eventColors": "Google Calendar",
       "hourHeight": 40,
-      "gridHeight": 540,
+      "gridHeight": 420,
       "contentScale": 125,
       "scrollToHour": 8,
       "syncMinutes": 5,
@@ -62,10 +63,11 @@
         "options": [
           "day",
           "3day",
-          "week"
+          "week",
+          "month"
         ],
         "defaultValue": "week",
-        "description": "Which range the popup opens on. d, 3 and w switch it while it is open."
+        "description": "Which range the popup opens on. d, 3, w and m switch it while it is open."
       },
       {
         "key": "workweek",
@@ -107,6 +109,17 @@
         "description": "On by default, so a meeting you turned down still holds its place in the day. Shown faded and struck through; turn it off to hide them the way Google does."
       },
       {
+        "key": "eventColors",
+        "type": "enum",
+        "label": "Event colours",
+        "options": [
+          "Google Calendar",
+          "Omarchy theme"
+        ],
+        "defaultValue": "Google Calendar",
+        "description": "Google Calendar keeps each calendar's own colour. Omarchy theme paints your calendar in the theme's accent and every other calendar in the theme colour nearest its Google one, and follows theme switches live."
+      },
+      {
         "key": "contentScale",
         "type": "integer",
         "label": "Scale of the popup's contents (%)",
@@ -133,8 +146,8 @@
         "min": 160,
         "max": 900,
         "step": 20,
-        "defaultValue": 540,
-        "description": "How much of the day is visible before it scrolls. Multiplied by the content scale, and capped by the screen."
+        "defaultValue": 420,
+        "description": "How much of the day is visible before it scrolls. Multiplied by the content scale, and never more than about 60% of the screen's height."
       },
       {
         "key": "scrollToHour",
@@ -229,7 +242,7 @@
         "max": 240,
         "step": 1,
         "defaultValue": 15,
-        "description": "Outside that window the bar shows only the glyph; hover it to see what is next."
+        "description": "Outside that window the bar shows only the glyph; hover it for a card with what is next and a Join button. Only events you accepted (or your own) count."
       },
       {
         "key": "warnMinutes",
@@ -278,7 +291,7 @@
         "type": "boolean",
         "label": "Notify when a meeting starts",
         "defaultValue": true,
-        "description": "A toast at the moment an event begins; clicking it opens the call, or the event in Google Calendar when there is no call attached. It stays on screen for 20 seconds, then fades. Declined and all-day events are skipped, and meetings that started before the shell did are not replayed."
+        "description": "A toast at the moment an event begins; clicking it opens the call, or the event in Google Calendar when there is no call attached. It stays on screen for 20 seconds, then fades. Declined, \"maybe\", unanswered and all-day events are skipped, and meetings that started before the shell did are not replayed."
       }
     ]
   }

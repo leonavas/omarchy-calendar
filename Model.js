@@ -69,11 +69,57 @@ function visibleDays(anchorMs, view, weekStart, workweek) {
     for (var i = 0; i < count; i++) days.push(addDays(first, i))
     return days
   }
+  if (view === "month") return monthDays(anchorMs, weekStart, workweek)
   if (view === "3day") {
     for (var j = 0; j < 3; j++) days.push(addDays(startOfDay(anchorMs), j))
     return days
   }
   return [startOfDay(anchorMs)]
+}
+
+// The month grid: whole weeks from the one holding the 1st to the one holding
+// the last day, so it is five or six rows. A work week drops the weekend
+// columns rather than shifting the grid.
+function monthDays(anchorMs, weekStart, workweek) {
+  var first = new Date(anchorMs)
+  first.setDate(1)
+  first.setHours(0, 0, 0, 0)
+  var firstMs = first.getTime()
+  var lastMs = addDays(addMonths(firstMs, 1), -1)
+  var start = startOfWeek(firstMs, workweek ? 1 : weekStart)
+  var end = addDays(startOfWeek(lastMs, workweek ? 1 : weekStart), 6)
+  var days = []
+  for (var d = start; d <= end; d = addDays(d, 1)) {
+    var weekday = new Date(d).getDay()
+    if (workweek && (weekday === 0 || weekday === 6)) continue
+    days.push(d)
+  }
+  return days
+}
+
+function sameMonth(a, b) {
+  var x = new Date(a), y = new Date(b)
+  return x.getFullYear() === y.getFullYear() && x.getMonth() === y.getMonth()
+}
+
+// One day's events for a month cell: all-day first, then by start time.
+function monthDayEvents(events, dayStartMs) {
+  var list = []
+  for (var i = 0; i < events.length; i++) {
+    var event = events[i]
+    if (!overlapsDay(event, dayStartMs)) continue
+    // A timed event belongs to the day it starts on — a 22:15 game is not
+    // also tomorrow's first item — unless it really spans whole days.
+    if (!isAllDay(event) && event.start < dayStartMs && event.end - event.start < DAY) continue
+    list.push(event)
+  }
+  list.sort(function(a, b) {
+    var aa = isAllDay(a) ? 0 : 1, bb = isAllDay(b) ? 0 : 1
+    if (aa !== bb) return aa - bb
+    if (a.start !== b.start) return a.start - b.start
+    return (b.end - b.start) - (a.end - a.start)
+  })
+  return list
 }
 
 function stepFor(view, workweek) {
@@ -344,6 +390,24 @@ function longWeekday(ms) { return WEEKDAYS_LONG[new Date(ms).getDay()] }
 function monthName(ms) { return MONTHS[new Date(ms).getMonth()] }
 function shortMonth(ms) { return MONTHS_SHORT[new Date(ms).getMonth()] }
 
+// The heading split in two, so the year can sit quieter than the month:
+// { main: "November", year: "2026" }. A range across years keeps it whole.
+function rangeTitleParts(days, view, anchorMs) {
+  if (view === "month")
+    return { main: monthName(anchorMs), year: String(new Date(anchorMs).getFullYear()) }
+  if (!days || days.length === 0) return { main: "", year: "" }
+  var first = new Date(days[0])
+  var last = new Date(days[days.length - 1])
+  if (first.getFullYear() !== last.getFullYear()) return { main: rangeTitle(days), year: "" }
+  if (days.length === 1)
+    return { main: longWeekday(days[0]) + ", " + monthName(days[0]) + " " + first.getDate(),
+             year: String(first.getFullYear()) }
+  if (first.getMonth() !== last.getMonth())
+    return { main: shortMonth(days[0]) + " – " + shortMonth(days[days.length - 1]),
+             year: String(last.getFullYear()) }
+  return { main: monthName(days[0]), year: String(first.getFullYear()) }
+}
+
 // The heading over the grid, in Google's own phrasing: one date for a day
 // view, a collapsed range for a week that straddles months or years.
 function rangeTitle(days) {
@@ -376,58 +440,20 @@ function isoWeek(ms) {
   return 1 + Math.round((date - firstThursday) / (7 * DAY))
 }
 
-// -------------------------------------------------------------------- colour
+// -------------------------------------------------------------------- style
 //
-// Google hands out event colours as plain "#rrggbb". Rather than route those
-// through Qt's colour helpers — which take a string but return an opaque
-// object that is awkward to tint — the few operations the grid needs are done
-// on the hex directly, and handed back as strings QML assigns to a `color`.
-
-function hexChannels(hex) {
-  var value = String(hex || "").replace("#", "")
-  if (value.length === 3) {
-    value = value.charAt(0) + value.charAt(0) + value.charAt(1) +
-            value.charAt(1) + value.charAt(2) + value.charAt(2)
-  }
-  if (value.length < 6) return { r: 3, g: 155, b: 229 }
-  return {
-    r: parseInt(value.substr(0, 2), 16),
-    g: parseInt(value.substr(2, 2), 16),
-    b: parseInt(value.substr(4, 2), 16)
-  }
-}
-
-function luminance(hex) {
-  var c = hexChannels(hex)
-  // Perceived brightness, the cheap sRGB approximation — enough to pick
-  // between black and white text.
-  return (0.299 * c.r + 0.587 * c.g + 0.114 * c.b) / 255
-}
-
-// Black or white, whichever stays legible on the event's own colour.
-function textOn(hex) {
-  return luminance(hex) > 0.62 ? "#1a1a1a" : "#ffffff"
-}
-
-function pad2Hex(value) {
-  var v = Math.max(0, Math.min(255, Math.round(value)))
-  var s = v.toString(16)
-  return s.length < 2 ? "0" + s : s
-}
-
-// "#rrggbb" + alpha -> "#aarrggbb", the form QML colour properties accept.
-function withAlpha(hex, alpha) {
-  var c = hexChannels(hex)
-  return "#" + pad2Hex(alpha * 255) + pad2Hex(c.r) + pad2Hex(c.g) + pad2Hex(c.b)
-}
+// Colour itself is mixed in QML (Panel.tone), against the theme's surface;
+// all the model decides is which treatment an event gets.
 
 // How an event is painted follows Google's own convention: a meeting you
-// accepted is a solid block, one you have not answered is an outline, and one
-// you declined fades out and gets struck through.
+// accepted is a solid block, one you have not answered is an outline, a
+// "maybe" a fainter outline, and one you declined is struck through.
 function blockStyle(event) {
   if (!event) return "filled"
+  if (isBlockedTime(event)) return "away"
   if (event.response === "declined") return "declined"
-  if (event.response === "needsAction" || event.response === "tentative") return "outlined"
+  if (event.response === "tentative") return "maybe"
+  if (event.response === "needsAction") return "outlined"
   return "filled"
 }
 
@@ -441,11 +467,53 @@ function isDeclined(event) {
   return event && event.response === "declined"
 }
 
+// "Maybe" is a hedge and "no answer yet" is not a yes: both keep their place
+// in the grid but never take the bar or raise a toast.
+function isMaybe(event) {
+  return event && event.response === "tentative"
+}
+
+function isUnanswered(event) {
+  return event && event.response === "needsAction"
+}
+
+// Time you blocked off for yourself in Google — out of office (a lunch with
+// auto-decline), focus time, working location. Not a meeting: no call, no
+// bar, no toast, and drawn as a quiet block of its own.
+function isBlockedTime(event) {
+  var type = event ? event.eventType : ""
+  return type === "outOfOffice" || type === "focusTime" || type === "workingLocation"
+}
+
+// Whether an event may speak for itself outside the grid — the bar label, its
+// hover card, middle click and the toast at its start. Only what you said yes
+// to (or what is yours, with no invitation to answer).
+function isAnnounceable(event) {
+  return event && !isAllDay(event) && !isDeclined(event) && !isMaybe(event) &&
+    !isUnanswered(event) && !isBlockedTime(event)
+}
+
+// What follows `after` today, for the hover card's "then" rows.
+function laterToday(events, after, nowMs, limit) {
+  var out = []
+  var dayEnd = addDays(startOfDay(nowMs), 1)
+  var from = after ? after.start : nowMs
+  for (var i = 0; i < events.length; i++) {
+    var event = events[i]
+    if (!isAnnounceable(event)) continue
+    if (after && event.id === after.id) continue
+    if (event.start <= from || event.start >= dayEnd) continue
+    out.push(event)
+  }
+  out.sort(function(a, b) { return a.start - b.start })
+  return out.slice(0, limit || 2)
+}
+
 function currentEvent(events, nowMs) {
   var best = null
   for (var i = 0; i < events.length; i++) {
     var event = events[i]
-    if (isAllDay(event) || isDeclined(event)) continue
+    if (!isAnnounceable(event)) continue
     if (event.start <= nowMs && event.end > nowMs) {
       if (!best || event.end < best.end) best = event
     }
@@ -458,7 +526,7 @@ function nextEvent(events, nowMs, horizonMs) {
   var best = null
   for (var i = 0; i < events.length; i++) {
     var event = events[i]
-    if (isAllDay(event) || isDeclined(event)) continue
+    if (!isAnnounceable(event)) continue
     if (event.start <= nowMs || event.start > limit) continue
     if (!best || event.start < best.start) best = event
   }
@@ -484,7 +552,7 @@ function barSubject(events, nowMs, leadMs, graceMs) {
   var bestDistance = 0
   for (var i = 0; i < events.length; i++) {
     var event = events[i]
-    if (isAllDay(event) || isDeclined(event)) continue
+    if (!isAnnounceable(event)) continue
     if (event.start - leadMs > nowMs) continue
     if (nowMs >= Math.min(event.start + graceMs, event.end)) continue
     var distance = Math.abs(event.start - nowMs)
@@ -495,6 +563,58 @@ function barSubject(events, nowMs, leadMs, graceMs) {
     }
   }
   return best
+}
+
+// Where an event stands against the clock, for the card: a kind the UI can
+// colour by and a phrase that reads at a glance.
+//   soon    — starts within 15 minutes ("Starts in 4 min")
+//   running — under way ("On now · 18 min left")
+//   later   — further out ("In 2h 10m", "Tomorrow at 09:00", "Thu at 14:00")
+//   past    — over ("Ended 40 min ago", "Ended")
+function eventStatus(event, nowMs, use24Hour) {
+  if (!event) return { kind: "later", label: "" }
+  if (isAllDay(event)) {
+    if (event.start <= nowMs && event.end > nowMs) return { kind: "running", label: "Today" }
+    if (event.end <= nowMs) return { kind: "past", label: "" }
+    return { kind: "later", label: "" }
+  }
+  if (event.end <= nowMs) {
+    var ago = Math.round((nowMs - event.end) / MINUTE)
+    if (ago < 60) return { kind: "past", label: ago <= 1 ? "Just ended" : "Ended " + ago + " min ago" }
+    return { kind: "past", label: sameDay(event.end, nowMs) ? "Ended at " + formatTime(event.end, use24Hour) : "Ended" }
+  }
+  if (event.start <= nowMs) {
+    var left = Math.max(1, Math.round((event.end - nowMs) / MINUTE))
+    return { kind: "running", label: "On now · " + (left < 60 ? left + " min left" : formatDuration(left * MINUTE) + " left") }
+  }
+  var minutes = Math.max(1, Math.round((event.start - nowMs) / MINUTE))
+  if (minutes <= 15) return { kind: "soon", label: "Starts in " + minutes + " min" }
+  if (minutes < 60) return { kind: "later", label: "In " + minutes + " min" }
+  if (sameDay(event.start, nowMs)) {
+    var hours = Math.floor(minutes / 60), rest = minutes % 60
+    return { kind: "later", label: "In " + hours + "h" + (rest ? " " + rest + "m" : "") }
+  }
+  if (sameDay(event.start, nowMs + DAY)) return { kind: "later", label: "Tomorrow at " + formatTime(event.start, use24Hour) }
+  return { kind: "later", label: "" }
+}
+
+// The bare host and path of a meeting link, for showing under the button:
+// "meet.google.com/abc-defg-hij".
+function displayUrl(url) {
+  var value = String(url || "").replace(/^https?:\/\//i, "")
+  var q = value.search(/[?#]/)
+  if (q >= 0) value = value.substr(0, q)
+  return value.replace(/\/$/, "")
+}
+
+// Up to two initials for a guest's avatar.
+function initials(attendee) {
+  var name = attendeeName(attendee).replace(/[._-]+/g, " ").trim()
+  if (name.length === 0) return "?"
+  var parts = name.split(/\s+/)
+  var first = parts[0].charAt(0)
+  var last = parts.length > 1 ? parts[parts.length - 1].charAt(0) : ""
+  return (first + last).toUpperCase()
 }
 
 function truncate(text, limit) {
@@ -629,13 +749,6 @@ function attendeeName(attendee) {
   return at > 0 ? email.substr(0, at) : email
 }
 
-function responseGlyph(response) {
-  if (response === "accepted") return "✓"
-  if (response === "declined") return "✕"
-  if (response === "tentative") return "?"
-  return "·"
-}
-
 function responseLabel(response) {
   if (response === "accepted") return "Going"
   if (response === "declined") return "Not going"
@@ -663,6 +776,187 @@ function attendeeSummary(attendees) {
   return parts.join(" · ")
 }
 
+// ------------------------------------------------------------- composing
+//
+// People to invite come from the calendar itself: everyone who has been on an
+// invitation with you, ranked by how often. No directory API, no extra
+// permission — and the people you meet are the people you invite.
+
+function isEmail(text) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(text || "").trim())
+}
+
+var FOLD = { "á": "a", "à": "a", "â": "a", "ã": "a", "ä": "a", "é": "e", "ê": "e",
+             "è": "e", "í": "i", "ì": "i", "ó": "o", "ô": "o", "õ": "o", "ö": "o",
+             "ú": "u", "ü": "u", "ç": "c", "ñ": "n" }
+
+function fold(text) {
+  var value = String(text || "").toLowerCase()
+  var out = ""
+  for (var i = 0; i < value.length; i++) {
+    var ch = value.charAt(i)
+    out += FOLD[ch] !== undefined ? FOLD[ch] : ch
+  }
+  return out
+}
+
+// `directory`: the Workspace copy from bin/gcalpeople.py — everyone in the
+// organisation, with names and photos. Merged in so search reaches people you
+// have never met, and the people you have met get their real names and faces.
+function peopleIndex(events, selfEmail, directory) {
+  var me = String(selfEmail || "").toLowerCase()
+  var byEmail = {}
+  var dir = directory || []
+  for (var d = 0; d < dir.length; d++) {
+    var known = String(dir[d].email || "").toLowerCase()
+    if (!known || known === me) continue
+    byEmail[known] = { email: known, name: dir[d].name || "", count: 0, photo: dir[d].photo || "" }
+  }
+  for (var i = 0; i < events.length; i++) {
+    var attendees = events[i].attendees || []
+    for (var j = 0; j < attendees.length; j++) {
+      var a = attendees[j]
+      var email = String(a.email || "").toLowerCase()
+      if (!email || email === me || a.self) continue
+      // Meeting rooms and group calendars are not people.
+      if (email.indexOf("resource.calendar.google.com") >= 0) continue
+      if (email.indexOf("group.calendar.google.com") >= 0) continue
+      var entry = byEmail[email]
+      if (!entry) entry = byEmail[email] = { email: email, name: "", count: 0, photo: "" }
+      entry.count++
+      if (a.name && !entry.name) entry.name = a.name
+    }
+  }
+  var list = []
+  for (var key in byEmail) {
+    var person = byEmail[key]
+    person.label = person.name || attendeeName(person)
+    person.search = fold(person.label + " " + person.email)
+    list.push(person)
+  }
+  list.sort(function(x, y) {
+    if (x.count !== y.count) return y.count - x.count
+    return x.label < y.label ? -1 : x.label > y.label ? 1 : 0
+  })
+  return list
+}
+
+function escapeHtml(text) {
+  return String(text || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+}
+
+// The label with what was typed picked out in bold, so a match explains
+// itself: "Mi<b>kail</b> Ajukas". Accents are folded for the match only.
+function highlightMatch(label, query) {
+  var text = String(label || "")
+  var folded = fold(text)
+  var words = fold(query).trim().split(/\s+/).filter(function(w) { return w.length > 0 })
+  var marks = []
+  for (var i = 0; i < text.length; i++) marks.push(false)
+  for (var w = 0; w < words.length; w++) {
+    var at = folded.indexOf(words[w])
+    if (at < 0) continue
+    for (var k = at; k < at + words[w].length && k < text.length; k++) marks[k] = true
+  }
+  var out = "", open = false
+  for (var j = 0; j < text.length; j++) {
+    if (marks[j] && !open) { out += "<b>"; open = true }
+    if (!marks[j] && open) { out += "</b>"; open = false }
+    out += escapeHtml(text.charAt(j))
+  }
+  return open ? out + "</b>" : out
+}
+
+// Best matches for what was typed: every word must appear in the name or the
+// address; a name that starts with it ranks above one that merely contains
+// it, then whoever you meet most.
+function searchPeople(index, query, exclude, limit) {
+  var words = fold(query).trim().split(/\s+/).filter(function(w) { return w.length > 0 })
+  if (words.length === 0) return []
+  var skip = {}
+  for (var i = 0; i < (exclude || []).length; i++) skip[String(exclude[i]).toLowerCase()] = true
+  var scored = []
+  for (var p = 0; p < index.length; p++) {
+    var person = index[p]
+    if (skip[person.email]) continue
+    var score = 0
+    var ok = true
+    for (var w = 0; w < words.length; w++) {
+      var at = person.search.indexOf(words[w])
+      if (at < 0) { ok = false; break }
+      score += (at === 0 || person.search.charAt(at - 1) === " " ||
+                person.search.charAt(at - 1) === ".") ? 2 : 1
+    }
+    if (ok) scored.push({ person: person, score: score })
+  }
+  scored.sort(function(a, b) {
+    if (a.score !== b.score) return b.score - a.score
+    return b.person.count - a.person.count
+  })
+  var out = []
+  for (var k = 0; k < scored.length && k < (limit || 5); k++) out.push(scored[k].person)
+  return out
+}
+
+// The next quarter hour from now, where a new meeting starts by default.
+function nextQuarter(nowMs) {
+  var step = 15 * MINUTE
+  return Math.ceil((nowMs + MINUTE) / step) * step
+}
+
+// Whether this calendar may change the event: you organise it, or the
+// organiser let guests modify it. Out-of-office and the like are yours too.
+function canEdit(event) {
+  if (!event || isAllDay(event)) return false
+  if (isBlockedTime(event)) return event.organizerSelf === true
+  return event.organizerSelf === true || event.guestsCanModify === true
+}
+
+// Whether you can answer the invitation from here: you are a guest on it and
+// not the one who sent it.
+function canRespond(event) {
+  if (!event || event.organizerSelf === true || isBlockedTime(event)) return false
+  var list = event.attendees || []
+  for (var i = 0; i < list.length; i++) if (list[i].self) return true
+  return false
+}
+
+// Guests other than you, for editing (rooms and yourself are kept by the
+// script without being shown).
+function editableGuests(event) {
+  var out = []
+  var list = (event && event.attendees) || []
+  for (var i = 0; i < list.length; i++) {
+    var a = list[i]
+    if (a.self || a.organizer) continue
+    var email = String(a.email || "").toLowerCase()
+    if (!email || email.indexOf("resource.calendar.google.com") >= 0) continue
+    out.push({ email: email, name: a.name || "", label: attendeeName(a) })
+  }
+  return out
+}
+
+// A click in the grid, as the quarter hour it falls in.
+function floorQuarter(ms) {
+  var date = new Date(ms)
+  date.setMinutes(Math.floor(date.getMinutes() / 15) * 15, 0, 0)
+  return date.getTime()
+}
+
+// "15m", "1h", "1h30", "2h".
+function shortDuration(minutes) {
+  var m = Math.round(minutes)
+  if (m < 60) return m + "m"
+  var h = Math.floor(m / 60), rest = m % 60
+  return rest === 0 ? h + "h" : h + "h" + pad2(rest)
+}
+
+// "Mon, Nov 16 · 10:45 – 11:15".
+function composeSummary(startMs, endMs, use24Hour) {
+  return shortWeekday(startMs) + ", " + shortMonth(startMs) + " " + new Date(startMs).getDate() +
+    "  ·  " + formatTime(startMs, use24Hour) + " – " + formatTime(endMs, use24Hour)
+}
+
 // Booleans out of shell.json arrive as real booleans from the settings panel,
 // but as strings from `omarchy bar set <id> <key> true` without --json. Both
 // spellings have to mean the same thing, or a setting toggled from the command
@@ -676,12 +970,111 @@ function truthy(value, fallback) {
   return fallback === true
 }
 
+// ------------------------------------------------------------ theme colours
+//
+// "Omarchy theme" colouring repaints every event from the active theme's
+// palette instead of Google's: your own calendar takes the theme's accent, and
+// every other calendar (or an event coloured by hand) takes the theme colour
+// nearest its Google hue, so calendars stay apart but look like the desktop.
+
+function hexHsl(hex) {
+  var m = String(hex || "").match(/^#?([0-9a-fA-F]{6})/)
+  if (!m) return null
+  var n = parseInt(m[1], 16)
+  var r = ((n >> 16) & 255) / 255, g = ((n >> 8) & 255) / 255, b = (n & 255) / 255
+  var max = Math.max(r, g, b), min = Math.min(r, g, b)
+  var l = (max + min) / 2
+  var d = max - min
+  if (d === 0) return { h: 0, s: 0, l: l }
+  var s = d / (1 - Math.abs(2 * l - 1))
+  var h
+  if (max === r) h = ((g - b) / d) % 6
+  else if (max === g) h = (b - r) / d + 2
+  else h = (r - g) / d + 4
+  h = h * 60
+  if (h < 0) h += 360
+  return { h: h, s: s, l: l }
+}
+
+// colors.toml as a palette. Newer themes name their hues (red, blue, ...);
+// older ones only carry the terminal's color1..color14, which mean the same.
+function themePalette(raw) {
+  var values = {}
+  var lines = String(raw || "").split("\n")
+  for (var i = 0; i < lines.length; i++) {
+    var match = lines[i].match(/^\s*([A-Za-z0-9_-]+)\s*=\s*["']?(#[0-9A-Fa-f]{6})/)
+    if (match) values[match[1]] = match[2]
+  }
+  var slots = [
+    ["red", "color1"], ["orange", ""], ["yellow", "color3"], ["green", "color2"],
+    ["cyan", "color6"], ["blue", "color4"], ["magenta", "color5"]
+  ]
+  var bright = { red: "color9", yellow: "color11", green: "color10",
+                 cyan: "color14", blue: "color12", magenta: "color13" }
+  var hues = []
+  for (var j = 0; j < slots.length; j++) {
+    var name = slots[j][0]
+    var base = values[name] || (slots[j][1] ? values[slots[j][1]] : "")
+    var hsl = hexHsl(base)
+    if (!hsl) continue
+    hues.push({
+      name: name, hex: base, h: hsl.h,
+      bright: values["bright_" + name] || (bright[name] ? values[bright[name]] || "" : "") || base
+    })
+  }
+  return {
+    hues: hues,
+    accent: values.accent || values.color4 || "",
+    muted: values.muted || values.color8 || values.foreground || ""
+  }
+}
+
+// One Google colour in the theme's terms: greys go to the theme's muted
+// tone, everything else to the nearest hue, its bright variant when the
+// Google colour was a pale one (Flamingo, Lavender) so pairs stay apart.
+function themeColor(hex, palette) {
+  if (!palette || !palette.hues || palette.hues.length === 0) return hex
+  var hsl = hexHsl(hex)
+  if (!hsl) return palette.accent || hex
+  if (hsl.s < 0.18) return palette.muted || hex
+  var best = null, bestDistance = 999
+  for (var i = 0; i < palette.hues.length; i++) {
+    var d = Math.abs(palette.hues[i].h - hsl.h)
+    if (d > 180) d = 360 - d
+    if (d < bestDistance) { bestDistance = d; best = palette.hues[i] }
+  }
+  return hsl.l > 0.6 ? best.bright : best.hex
+}
+
+// The cache's events with their colours swapped for the theme's. Copies, so
+// switching back to Google's colours needs no re-read.
+function recolorEvents(events, palette, calendars) {
+  if (!palette || !palette.hues || palette.hues.length === 0) return events
+  var primary = null
+  for (var c = 0; c < (calendars || []).length; c++) {
+    if (calendars[c].primary) { primary = calendars[c]; break }
+  }
+  var out = []
+  for (var i = 0; i < events.length; i++) {
+    var event = events[i]
+    // Your own calendar is the accent, unless the event was coloured by hand.
+    var own = primary && palette.accent && event.calendarId === primary.id &&
+              String(event.color).toLowerCase() === String(primary.color).toLowerCase()
+    var copy = {}
+    for (var key in event) copy[key] = event[key]
+    copy.googleColor = event.color
+    copy.color = own ? palette.accent : themeColor(event.color, palette)
+    out.push(copy)
+  }
+  return out
+}
+
 // -------------------------------------------------------------------- state
 
 function parseCache(raw) {
   var empty = {
     events: [], calendars: [], account: "", syncedAt: 0,
-    error: "", needsAuth: false, loaded: false
+    error: "", needsAuth: false, canWrite: false, loaded: false
   }
   if (!raw || String(raw).length === 0) return empty
   try {
@@ -693,6 +1086,7 @@ function parseCache(raw) {
       syncedAt: Number(parsed.syncedAt || 0),
       error: String(parsed.error || ""),
       needsAuth: parsed.needsAuth === true,
+      canWrite: parsed.canWrite === true,
       loaded: true
     }
   } catch (e) {

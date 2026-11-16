@@ -53,7 +53,8 @@ across Audience / Data Access / Clients.
                          it (no review needed). Otherwise "External", and add
                          your own address under "Test users".
        • Data Access  -> Add or remove scopes -> tick
-                         .../auth/calendar.readonly -> Update -> Save
+                         .../auth/calendar.readonly and
+                         .../auth/calendar.events -> Update -> Save
   4. Clients -> "+ Create client"
        • Application type: "Desktop app"
        • Create, then download its JSON
@@ -221,7 +222,8 @@ def authorize(client_id, client_secret, open_browser=True):
         "client_id": client_id,
         "client_secret": client_secret,
         "refresh_token": refresh_token,
-        "scope": SCOPE,
+        # What Google actually granted, which can be less than asked for.
+        "scope": tokens.get("scope") or SCOPE,
     })
     # Any token cached against the previous grant is meaningless now.
     if os.path.exists(TOKEN_FILE):
