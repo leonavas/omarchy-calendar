@@ -91,8 +91,8 @@ Panel {
   // deep tone of its calendar, unanswered a pale wash with an outline, "maybe"
   // paler still, declined only an outline. Past events step back further.
   function blockFill(event, style) {
-    if (style === "filled") return root.tone(event.color, 0.46)
-    if (style === "outlined") return root.tone(event.color, 0.13)
+    if (style === "filled") return root.tone(event.color, 0.62)
+    if (style === "outlined") return root.tone(event.color, 0.2)
     if (style === "maybe") return root.tone(event.color, 0.06)
     if (style === "away") return Qt.tint(Qt.rgba(root.surface.r, root.surface.g, root.surface.b, 1),
                                          Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.07))
@@ -1854,7 +1854,7 @@ Panel {
                   border.color: selected ? root.foreground
                     : live ? Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.6)
                     : root.blockBorder(event, style)
-                  opacity: style === "declined" ? 0.5 : (past && !selected ? 0.62 : 1)
+                  opacity: style === "declined" ? 0.5 : (past && !selected ? 0.82 : 1)
                   Behavior on color { ColorAnimation { duration: Style.duration(110) } }
 
                   Text {
@@ -2163,7 +2163,7 @@ Panel {
                   border.width: allDay || live ? 1 : 0
                   border.color: live ? Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.4)
                     : root.blockBorder(event, style)
-                  opacity: style === "declined" ? 0.5 : (past ? 0.62 : 1)
+                  opacity: style === "declined" ? 0.5 : (past ? 0.82 : 1)
                   Behavior on color { ColorAnimation { duration: Style.duration(110) } }
 
                   // The calendar's colour as a dot, filled when you are going,
